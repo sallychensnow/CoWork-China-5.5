@@ -1,0 +1,110 @@
+name: revenue_model
+description: "电商销售分析语义模型 - 覆盖订单、客户和产品数据"
+tables:
+  - name: ORDERS
+    base_table:
+      database: SNOWFLAKE_PROD_USER1
+      schema: DEMO_DATA
+      table: ORDERS
+    description: "订单表，记录所有客户的购买订单"
+    dimensions:
+      - name: ORDER_ID
+        description: "订单编号"
+        expr: ORDER_ID
+      - name: PRODUCT_NAME
+        description: "产品名称"
+        expr: PRODUCT_NAME
+      - name: CATEGORY
+        description: "产品类别，如电子产品、家电、办公设备等"
+        expr: CATEGORY
+      - name: STATUS
+        description: "订单状态：已完成、配送中、待付款"
+        expr: STATUS
+      - name: REGION
+        description: "区域：华东、华北、华南、华中、西南、西北、东北"
+        expr: REGION
+    time_dimensions:
+      - name: ORDER_DATE
+        description: "下单日期"
+        expr: ORDER_DATE
+        data_type: DATE
+    measures:
+      - name: TOTAL_REVENUE
+        description: "总销售额（元）"
+        expr: SUM(TOTAL_AMOUNT)
+      - name: ORDER_COUNT
+        description: "订单数量"
+        expr: COUNT(ORDER_ID)
+      - name: AVG_ORDER_VALUE
+        description: "平均客单价（元）"
+        expr: AVG(TOTAL_AMOUNT)
+      - name: TOTAL_QUANTITY
+        description: "总销售件数"
+        expr: SUM(QUANTITY)
+
+  - name: CUSTOMERS
+    base_table:
+      database: SNOWFLAKE_PROD_USER1
+      schema: DEMO_DATA
+      table: CUSTOMERS
+    description: "客户表，记录客户基本信息"
+    dimensions:
+      - name: CUSTOMER_ID
+        description: "客户编号"
+        expr: CUSTOMER_ID
+      - name: CUSTOMER_NAME
+        description: "客户姓名"
+        expr: CUSTOMER_NAME
+      - name: CITY
+        description: "所在城市"
+        expr: CITY
+      - name: REGION
+        description: "所在区域"
+        expr: REGION
+      - name: CUSTOMER_LEVEL
+        description: "会员等级：普通、白银、黄金、钻石"
+        expr: CUSTOMER_LEVEL
+    time_dimensions:
+      - name: REGISTRATION_DATE
+        description: "注册日期"
+        expr: REGISTRATION_DATE
+        data_type: DATE
+    measures:
+      - name: CUSTOMER_COUNT
+        description: "客户数量"
+        expr: COUNT(CUSTOMER_ID)
+
+  - name: PRODUCTS
+    base_table:
+      database: SNOWFLAKE_PROD_USER1
+      schema: DEMO_DATA
+      table: PRODUCTS
+    description: "产品表，记录在售产品信息"
+    dimensions:
+      - name: PRODUCT_ID
+        description: "产品编号"
+        expr: PRODUCT_ID
+      - name: PRODUCT_NAME
+        description: "产品名称"
+        expr: PRODUCT_NAME
+      - name: CATEGORY
+        description: "产品类别"
+        expr: CATEGORY
+      - name: BRAND
+        description: "品牌"
+        expr: BRAND
+    measures:
+      - name: PRODUCT_COUNT
+        description: "产品数量"
+        expr: COUNT(PRODUCT_ID)
+      - name: AVG_MARGIN
+        description: "平均利润率"
+        expr: AVG((UNIT_PRICE - UNIT_COST) / UNIT_PRICE)
+
+verified_queries:
+  - question: "各区域的总销售额是多少"
+    sql: "SELECT REGION, SUM(TOTAL_AMOUNT) AS TOTAL_REVENUE FROM SNOWFLAKE_PROD_USER1.DEMO_DATA.ORDERS GROUP BY REGION ORDER BY TOTAL_REVENUE DESC"
+  - question: "哪个产品卖得最多"
+    sql: "SELECT PRODUCT_NAME, SUM(QUANTITY) AS TOTAL_QTY FROM SNOWFLAKE_PROD_USER1.DEMO_DATA.ORDERS GROUP BY PRODUCT_NAME ORDER BY TOTAL_QTY DESC LIMIT 5"
+  - question: "每月销售趋势"
+    sql: "SELECT DATE_TRUNC('MONTH', ORDER_DATE) AS MONTH, SUM(TOTAL_AMOUNT) AS REVENUE FROM SNOWFLAKE_PROD_USER1.DEMO_DATA.ORDERS GROUP BY MONTH ORDER BY MONTH"

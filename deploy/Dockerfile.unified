@@ -1,0 +1,39 @@
+FROM docker.m.daocloud.io/python:3.11-slim
+
+# Use Aliyun mirrors for apt (faster in China)
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+
+# Install Node.js from Chinese mirror
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/nodesource/setup_20.x | bash - && \
+    apt-get install -y nodejs || \
+    (curl -fsSL https://npmmirror.com/mirrors/node/v20.18.0/node-v20.18.0-linux-x64.tar.xz | \
+     tar -xJ -C /usr/local --strip-components=1) && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install backend dependencies (use Tsinghua pip mirror)
+COPY backend/requirements.txt /app/backend/
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r /app/backend/requirements.txt
+
+# Copy backend
+COPY backend/ /app/backend/
+
+# Copy frontend-server (Node.js proxy + prototype HTML)
+COPY frontend-server/ /app/frontend-server/
+
+# Copy skills
+COPY skills/ /app/backend/skills/
+
+# Start script: run both processes
+RUN echo '#!/bin/sh\ncd /app/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &\ncd /app/frontend-server && node server.js' > /app/start.sh && chmod +x /app/start.sh
+
+ENV PYTHONPATH=/app/backend
+ENV BACKEND_URL=http://localhost:8000
+ENV PORT=3000
+
+EXPOSE 3000
+
+CMD ["/app/start.sh"]

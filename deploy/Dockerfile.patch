@@ -1,0 +1,18 @@
+FROM xgfxmus-wr98488.registry.snowflakecomputing.cn/cowork/app/cowork_repo/cowork-china:v13
+
+# v14 patch: Fix Cortex Analyst, Cortex Search, Deep Research, UI cleanup
+
+# Update backend code
+COPY backend/app/ /app/backend/app/
+
+# Update frontend
+COPY frontend-server/public/ /app/frontend-server/public/
+
+# Install ArcticSwarm core deps + package (no-deps to avoid heavy optional deps)
+COPY ArcticSwarm/arcticswarm/ /app/ArcticSwarm/arcticswarm/
+COPY ArcticSwarm/pyproject.toml /app/ArcticSwarm/
+RUN pip install --no-cache-dir openai rich pyyaml requests markdown sqlparse prompt_toolkit 2>/dev/null; \
+    pip install --no-cache-dir --no-deps -e /app/ArcticSwarm/ 2>/dev/null || true
+
+# Ensure PYTHONPATH
+ENV PYTHONPATH=/app/backend

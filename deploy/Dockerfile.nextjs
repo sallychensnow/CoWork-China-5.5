@@ -1,0 +1,50 @@
+# Stage 1: Build Next.js frontend
+FROM docker.m.daocloud.io/node:20-alpine AS frontend-builder
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm config set registry https://registry.npmmirror.com && npm ci
+COPY frontend/ .
+RUN npm run build
+
+# Stage 2: Python backend + Next.js standalone
+FROM docker.m.daocloud.io/python:3.11-slim
+
+# Use Aliyun mirrors for apt
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+
+# Install Node.js runtime (needed for Next.js standalone server)
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/nodesource/setup_20.x | bash - && \
+    apt-get install -y nodejs || \
+    (curl -fsSL https://npmmirror.com/mirrors/node/v20.18.0/node-v20.18.0-linux-x64.tar.xz | \
+     tar -xJ -C /usr/local --strip-components=1) && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install backend Python dependencies
+COPY backend/requirements.txt /app/backend/
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r /app/backend/requirements.txt
+
+# Copy backend source
+COPY backend/ /app/backend/
+
+# Copy Next.js standalone output from builder
+COPY --from=frontend-builder /app/.next/standalone /app/frontend
+COPY --from=frontend-builder /app/.next/static /app/frontend/.next/static
+COPY --from=frontend-builder /app/public /app/frontend/public
+
+# Copy skills
+COPY skills/ /app/backend/skills/
+
+# Start script: backend on 8000, Next.js on 3000
+RUN printf '#!/bin/sh\ncd /app/backend && uvicorn app.main:app --host 0.0.0.0 --port 8000 &\ncd /app/frontend && node server.js &\nwait\n' > /app/start.sh && chmod +x /app/start.sh
+
+ENV PYTHONPATH=/app/backend
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+EXPOSE 3000
+
+CMD ["/app/start.sh"]
