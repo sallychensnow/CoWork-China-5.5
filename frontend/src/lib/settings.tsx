@@ -10,6 +10,9 @@ interface UserInfo {
   email: string;
   initials: string;
   account: string;
+  org: string;
+  role: string;
+  warehouse: string;
 }
 
 interface SettingsContextType {
@@ -80,7 +83,7 @@ const SettingsContext = createContext<SettingsContextType | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('dark');
   const [locale, setLocaleState] = useState<Locale>('zh');
-  const [user, setUser] = useState<UserInfo>({ name: '', email: '', initials: '', account: '' });
+  const [user, setUser] = useState<UserInfo>({ name: '', email: '', initials: '', account: '', org: '', role: '', warehouse: '' });
 
   useEffect(() => {
     const saved = localStorage.getItem('cowork-theme') as Theme;
@@ -88,19 +91,29 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (saved) setThemeState(saved);
     if (savedLocale) setLocaleState(savedLocale);
 
-    // Fetch real user info
+    // Fetch greeting for time-aware greeting only (not for name)
     fetch('/api/agent/greeting')
       .then(r => r.json())
+      .then(() => {
+        // greeting data used by WelcomeScreen directly, not for user name
+      })
+      .catch(() => {});
+
+    // Fetch full user identity from Snowflake (authoritative source for name)
+    fetch('/api/agent/user-info')
+      .then(r => r.json())
       .then(data => {
-        const name = data?.username || data?.name || '';
-        const email = data?.email || '';
-        const account = data?.account || '';
-        setUser({
-          name,
-          email,
-          initials: getInitials(name),
-          account,
-        });
+        const displayName = data?.display_name || data?.user || '';
+        setUser(prev => ({
+          ...prev,
+          name: displayName || prev.name,
+          email: data?.email || prev.email,
+          account: data?.account || prev.account,
+          org: data?.org || '',
+          role: data?.role || '',
+          warehouse: data?.warehouse || '',
+          initials: getInitials(displayName) || prev.initials || getInitials(data?.user || ''),
+        }));
       })
       .catch(() => {});
   }, []);

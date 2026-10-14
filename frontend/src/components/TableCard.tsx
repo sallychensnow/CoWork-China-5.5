@@ -1,13 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import type { TableData } from '@/lib/types';
 
 interface TableCardProps {
   data: TableData;
+  sql?: string;
 }
 
-export default function TableCard({ data }: TableCardProps) {
+export default function TableCard({ data, sql }: TableCardProps) {
   const { title, columns, rows } = data;
+  const [showSql, setShowSql] = useState(false);
 
   return (
     <div className="my-4 border border-border rounded-xl bg-bg-primary overflow-hidden">
@@ -16,13 +19,27 @@ export default function TableCard({ data }: TableCardProps) {
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
           <div className="flex items-center gap-2">
-            <button className="p-1.5 rounded hover:bg-bg-hover text-text-muted">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
-            </button>
-            <button className="p-1.5 rounded hover:bg-bg-hover text-text-muted">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-            </button>
+            {sql && (
+              <button
+                onClick={() => setShowSql(!showSql)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                  showSql
+                    ? 'border-accent/40 text-accent bg-accent/10'
+                    : 'border-border-subtle text-text-secondary hover:bg-bg-hover'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                View SQL
+              </button>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* SQL panel */}
+      {showSql && sql && (
+        <div className="px-5 py-3 border-t border-border-subtle bg-bg-secondary">
+          <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap overflow-x-auto">{sql}</pre>
         </div>
       )}
 

@@ -215,10 +215,16 @@ async def run_agent(request: ChatRequest) -> AsyncGenerator[str, None]:
 
 
 def _get_enabled_tools(request: ChatRequest, agent_config: dict | None = None) -> list[str] | None:
-    """Determine which tools to make available based on agent config."""
+    """Determine which tools to make available based on agent config.
+    
+    deep_research is only enabled when the user explicitly toggles it in PlusMenu
+    (request.deep_research == True), regardless of agent config.
+    """
     if agent_config and agent_config.get("tools"):
-        return agent_config["tools"]
-    tools = ["cortex_analyst", "cortex_search", "python_exec"]
+        tools = [t for t in agent_config["tools"] if t != "deep_research"]
+    else:
+        tools = ["cortex_analyst", "cortex_search", "python_exec"]
+    # Only add deep_research when user explicitly enabled it in PlusMenu
     if request.deep_research:
         tools.append("deep_research")
     return tools

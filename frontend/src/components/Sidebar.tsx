@@ -66,7 +66,7 @@ export default function Sidebar({ collapsed = false, onToggle, onNewChat, onLoad
   const NewChatIcon = () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
   );
-  const AgentsIcon = () => (
+  const CapIcon = () => (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
   );
   const ModelsIcon = () => (
@@ -93,8 +93,8 @@ export default function Sidebar({ collapsed = false, onToggle, onNewChat, onLoad
             <Link href="/" onClick={onNewChat} className="p-2.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors" title={t('nav.newChat')}>
               <NewChatIcon />
             </Link>
-            <Link href="/agents" className={`p-2.5 rounded-lg transition-colors ${pathname === '/agents' ? 'bg-bg-hover text-text-primary' : 'text-text-primary hover:bg-bg-hover'}`} title={t('nav.agents')}>
-              <AgentsIcon />
+            <Link href="/capabilities" className={`p-2.5 rounded-lg transition-colors ${pathname === '/capabilities' ? 'bg-bg-hover text-text-primary' : 'text-text-primary hover:bg-bg-hover'}`} title="Capabilities">
+              <CapIcon />
             </Link>
             <Link href="/models" className={`p-2.5 rounded-lg transition-colors ${pathname === '/models' ? 'bg-bg-hover text-text-primary' : 'text-text-primary hover:bg-bg-hover'}`} title={t('nav.models')}>
               <ModelsIcon />
@@ -148,13 +148,13 @@ export default function Sidebar({ collapsed = false, onToggle, onNewChat, onLoad
         {/* Navigation */}
         <nav className="px-2 space-y-0.5">
           <Link
-            href="/agents"
+            href="/capabilities"
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[14px] transition-colors ${
-              pathname === '/agents' ? 'bg-bg-hover text-text-primary' : 'text-text-primary hover:bg-bg-hover'
+              pathname === '/capabilities' ? 'bg-bg-hover text-text-primary' : 'text-text-primary hover:bg-bg-hover'
             }`}
           >
-            <AgentsIcon />
-            <span>{t('nav.agents')}</span>
+            <CapIcon />
+            <span>Capabilities</span>
           </Link>
           <Link
             href="/models"

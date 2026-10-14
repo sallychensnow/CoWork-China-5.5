@@ -1,0 +1,120 @@
+name: manufacturing_model
+description: "制造业生产分析语义模型 - 覆盖工单、产线和质检数据"
+tables:
+  - name: MFG_WORK_ORDERS
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: MFG_WORK_ORDERS
+    description: "生产工单表，记录每日产线生产数据"
+    dimensions:
+      - name: WO_ID
+        description: "工单编号"
+        expr: WO_ID
+      - name: LINE_NAME
+        description: "产线名称"
+        expr: LINE_NAME
+      - name: PRODUCT_TYPE
+        description: "产品类型：主板组装、整机组装、成品包装、功能测试"
+        expr: PRODUCT_TYPE
+      - name: SHIFT
+        description: "班次：早班、中班、晚班"
+        expr: SHIFT
+    time_dimensions:
+      - name: PRODUCTION_DATE
+        description: "生产日期"
+        expr: PRODUCTION_DATE
+        data_type: DATE
+    measures:
+      - name: TOTAL_PLANNED
+        description: "计划产量"
+        expr: SUM(PLANNED_QTY)
+      - name: TOTAL_ACTUAL
+        description: "实际产量"
+        expr: SUM(ACTUAL_QTY)
+      - name: TOTAL_GOOD
+        description: "良品数量"
+        expr: SUM(GOOD_QTY)
+      - name: AVG_YIELD_RATE
+        description: "平均良品率"
+        expr: AVG(YIELD_RATE)
+      - name: PLAN_ACHIEVEMENT
+        description: "计划达成率"
+        expr: SUM(ACTUAL_QTY)*100.0/NULLIF(SUM(PLANNED_QTY),0)
+
+  - name: MFG_PRODUCTION_LINES
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: MFG_PRODUCTION_LINES
+    description: "产线表，记录产线基本信息和产能"
+    dimensions:
+      - name: LINE_ID
+        description: "产线编号"
+        expr: LINE_ID
+      - name: LINE_NAME
+        description: "产线名称"
+        expr: LINE_NAME
+      - name: PRODUCT_TYPE
+        description: "产品类型"
+        expr: PRODUCT_TYPE
+      - name: STATUS
+        description: "产线状态：运行中、维护中"
+        expr: STATUS
+      - name: SHIFT_MODE
+        description: "班制：两班、三班"
+        expr: SHIFT_MODE
+    measures:
+      - name: TOTAL_CAPACITY
+        description: "总日产能"
+        expr: SUM(DAILY_CAPACITY)
+
+  - name: MFG_QUALITY_RECORDS
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: MFG_QUALITY_RECORDS
+    description: "质检记录表，记录产品质量检测数据"
+    dimensions:
+      - name: QC_ID
+        description: "质检记录编号"
+        expr: QC_ID
+      - name: BATCH_CODE
+        description: "批次号"
+        expr: BATCH_CODE
+      - name: DEFECT_TYPE
+        description: "缺陷类型：焊接不良、外观缺陷、尺寸超差、功能异常、材料缺陷、标签错误"
+        expr: DEFECT_TYPE
+      - name: INSPECTION_METHOD
+        description: "检测方法：目视检查、AOI自动检测、X-Ray检测"
+        expr: INSPECTION_METHOD
+      - name: INSPECTOR
+        description: "检测员"
+        expr: INSPECTOR
+    time_dimensions:
+      - name: INSPECTION_DATE
+        description: "检测日期"
+        expr: INSPECTION_DATE
+        data_type: DATE
+    measures:
+      - name: TOTAL_DEFECTS
+        description: "缺陷总数"
+        expr: SUM(DEFECT_COUNT)
+      - name: TOTAL_SAMPLES
+        description: "总抽检数"
+        expr: SUM(SAMPLE_SIZE)
+      - name: DEFECT_RATE
+        description: "缺陷率"
+        expr: SUM(DEFECT_COUNT)*100.0/NULLIF(SUM(SAMPLE_SIZE),0)
+
+verified_queries:
+  - question: "各产线的良品率"
+    sql: "SELECT LINE_NAME, ROUND(AVG(YIELD_RATE)*100,2) AS YIELD_PCT FROM COWORK.DATA.MFG_WORK_ORDERS GROUP BY LINE_NAME ORDER BY YIELD_PCT ASC"
+  - question: "缺陷类型分布"
+    sql: "SELECT DEFECT_TYPE, SUM(DEFECT_COUNT) AS TOTAL, ROUND(SUM(DEFECT_COUNT)*100.0/(SELECT SUM(DEFECT_COUNT) FROM COWORK.DATA.MFG_QUALITY_RECORDS),1) AS PCT FROM COWORK.DATA.MFG_QUALITY_RECORDS GROUP BY DEFECT_TYPE ORDER BY TOTAL DESC"
+  - question: "每月产能利用率趋势"
+    sql: "SELECT DATE_TRUNC('MONTH', PRODUCTION_DATE) AS MONTH, ROUND(SUM(ACTUAL_QTY)*100.0/NULLIF(SUM(PLANNED_QTY),0),1) AS UTIL_PCT FROM COWORK.DATA.MFG_WORK_ORDERS GROUP BY MONTH ORDER BY MONTH"
+  - question: "各产线的计划达成率"
+    sql: "SELECT LINE_NAME, SUM(PLANNED_QTY) AS PLANNED, SUM(ACTUAL_QTY) AS ACTUAL, ROUND(SUM(ACTUAL_QTY)*100.0/NULLIF(SUM(PLANNED_QTY),0),1) AS ACHIEVE_PCT FROM COWORK.DATA.MFG_WORK_ORDERS GROUP BY LINE_NAME ORDER BY ACHIEVE_PCT ASC"
+  - question: "质检不合格批次明细"
+    sql: "SELECT BATCH_CODE, DEFECT_TYPE, DEFECT_COUNT, SAMPLE_SIZE, INSPECTION_METHOD, INSPECTION_DATE FROM COWORK.DATA.MFG_QUALITY_RECORDS WHERE DEFECT_COUNT > 5 ORDER BY DEFECT_COUNT DESC LIMIT 20"

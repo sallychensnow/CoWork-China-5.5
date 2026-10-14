@@ -30,31 +30,77 @@ def _get_connection():
         conn.cursor().execute(f"USE WAREHOUSE {os.environ.get('SNOWFLAKE_WAREHOUSE', 'COWORK_WH')}")
         return conn
     # Local dev
-    return snowflake.connector.connect(connection_name='china_dev')
+    return snowflake.connector.connect(connection_name='kr47337')
 
 
 def _get_semantic_model_content(explicit_model: str | None) -> str | None:
-    """Get semantic model YAML content from active sources or stage path."""
+    """Get semantic model YAML content from active sources, stage, or local files."""
+    import sys
     try:
         from app.routers.sources import _active_sources
         models = _active_sources.get("semantic_models", [])
         if explicit_model:
-            # Check if it's a stage path like @DB.SCHEMA.STAGE/file.yaml
             if explicit_model.startswith("@"):
-                # Try to find in already-loaded models first
                 for m in models:
                     if m.get("stage_path") == explicit_model or m.get("name") in explicit_model:
                         return m["content"]
-                # Not loaded yet — fetch directly from stage
-                return _fetch_yaml_from_stage(explicit_model)
-            # Match by name
+                # Try stage fetch
+                content = _fetch_yaml_from_stage(explicit_model)
+                if content:
+                    return content
+                # Fallback: try local file in backend/semantic_models/
+                return _fetch_yaml_from_local(explicit_model)
             for m in models:
                 if m["name"] == explicit_model:
                     return m["content"]
         if models:
             return models[0]["content"]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Analyst] _get_semantic_model_content error: {e}", file=sys.stderr, flush=True)
+
+    # Last resort: if explicit_model given, try local file
+    if explicit_model:
+        return _fetch_yaml_from_local(explicit_model)
+    # Try any local YAML file
+    return _fetch_any_local_yaml()
+
+
+def _fetch_yaml_from_local(stage_path: str) -> str | None:
+    """Try to load YAML from local semantic_models directory (inside Docker image)."""
+    import sys
+    filename = stage_path.split("/")[-1]
+    if not filename.endswith((".yaml", ".yml")):
+        filename += ".yaml"
+    # Try multiple possible locations
+    candidates = [
+        os.path.join(os.path.dirname(__file__), "..", "..", "semantic_models", filename),
+        os.path.join("/app", "backend", "semantic_models", filename),
+    ]
+    for path in candidates:
+        path = os.path.abspath(path)
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                content = f.read()
+            print(f"[Analyst] Loaded YAML from local: {path}", file=sys.stderr, flush=True)
+            return content
+    print(f"[Analyst] Local YAML not found for: {filename}", file=sys.stderr, flush=True)
+    return None
+
+
+def _fetch_any_local_yaml() -> str | None:
+    """Load the first available local YAML file as fallback."""
+    import glob, sys
+    for d in [
+        os.path.join(os.path.dirname(__file__), "..", "..", "semantic_models"),
+        os.path.join("/app", "backend", "semantic_models"),
+    ]:
+        d = os.path.abspath(d)
+        files = glob.glob(os.path.join(d, "*.yaml")) + glob.glob(os.path.join(d, "*.yml"))
+        if files:
+            with open(files[0], "r") as f:
+                content = f.read()
+            print(f"[Analyst] Loaded fallback YAML: {files[0]}", file=sys.stderr, flush=True)
+            return content
     return None
 
 
@@ -88,7 +134,8 @@ def _fetch_yaml_from_stage(stage_path: str) -> str | None:
 
 
 def _generate_sql(conn, question: str, model_yaml: str, model: str = "qwen-plus") -> str:
-    """Use Qwen UDF to generate SQL from user question + semantic model."""
+    """Use DashScope API to generate SQL from user question + semantic model."""
+    import httpx
     prompt = f"""Based on this semantic model:
 
 {model_yaml}
@@ -100,13 +147,18 @@ Rules:
 - Return ONLY the SQL, no explanation, no markdown
 - Use fully qualified table names (database.schema.table)
 """
-    escaped = prompt.replace("'", "''")
-    cursor = conn.cursor()
-    cursor.execute(
-        f"SELECT SNOWFLAKE_PROD_USER1.CORTEX_ANALYST.QWEN_COMPLETE('{model}', $${escaped}$$)"
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    base_url = os.environ.get("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    resp = httpx.post(
+        f"{base_url}/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "enable_thinking": False},
+        timeout=60.0,
     )
-    result = cursor.fetchone()
-    sql = result[0].strip() if result and result[0] else ""
+    if resp.status_code != 200:
+        print(f"[Analyst] SQL gen API error: {resp.status_code} {resp.text[:200]}", file=sys.stderr, flush=True)
+        return ""
+    sql = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
     # Clean markdown code blocks if present
     if sql.startswith("```"):
         lines = sql.split("\n")

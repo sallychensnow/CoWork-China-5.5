@@ -30,7 +30,7 @@ def _get_connection():
         conn.cursor().execute(f"USE WAREHOUSE {os.environ.get('SNOWFLAKE_WAREHOUSE', 'COWORK_WH')}")
         return conn
     # Local dev: use connection name
-    return snowflake.connector.connect(connection_name="china_dev")
+    return snowflake.connector.connect(connection_name="kr47337")
 
 
 def _get_active_search_service():

@@ -1,16 +1,17 @@
 spec:
   containers:
-    - name: cowork-backend
-      image: /COWORK/APP/IMAGES/cowork-backend:latest
+    - name: cowork
+      image: /COWORK/APP/IMAGES/cowork-china:v10
       env:
-        DASHSCOPE_API_KEY:
-          type: secret
-          name: cowork_dashscope_key
         SNOWFLAKE_WAREHOUSE: COWORK_WH
         SNOWFLAKE_DATABASE: COWORK
         SNOWFLAKE_SCHEMA: DATA
-        CORTEX_ANALYST_MODEL: "@COWORK.APP.SEMANTIC_MODELS/model.yaml"
-        CORTEX_SEARCH_SERVICE: DOC_SEARCH_SERVICE
+        USE_ARCTICSWARM: "true"
+        LLM_MODEL: "qwen-plus"
+        LLM_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+      secrets:
+        - snowflakeName: COWORK.APP.COWORK_DASHSCOPE_KEY
+          envVarName: DASHSCOPE_API_KEY
       resources:
         requests:
           cpu: "1"
@@ -18,17 +19,6 @@ spec:
         limits:
           cpu: "2"
           memory: 4Gi
-    - name: cowork-frontend
-      image: /COWORK/APP/IMAGES/cowork-frontend:latest
-      env:
-        BACKEND_URL: http://localhost:8000
-      resources:
-        requests:
-          cpu: "0.5"
-          memory: 512Mi
-        limits:
-          cpu: "1"
-          memory: 1Gi
   endpoints:
     - name: app
       port: 3000

@@ -118,7 +118,7 @@ export default function AgentsPage() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-semibold text-text-primary">{t('agents.title')}</h1>
           <button
-            onClick={() => setEditing({ id: `agent_${Date.now()}`, name: '', description: '', tools: ['cortex_analyst', 'cortex_search'], semantic_models: [], search_services: [], icon: '🤖' })}
+            onClick={() => setEditing({ id: `agent_${Date.now()}`, name: '', description: '', tools: ['cortex_analyst', 'cortex_search', 'deep_research'], semantic_models: [], search_services: [], skills: [], icon: '🤖' })}
             className="px-4 py-2 bg-accent text-white rounded-lg text-sm hover:opacity-90 transition-opacity"
           >
             {t('agents.new')}

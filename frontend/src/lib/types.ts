@@ -24,6 +24,7 @@ export interface ToolResult {
   display?: {
     type: 'table' | 'chart';
     data: TableData | ChartData;
+    sql?: string;
   };
 }
 
@@ -71,6 +72,7 @@ export interface Agent {
   tools: string[];
   semantic_models: string[];
   search_services: string[];
+  skills: string[];
   icon: string;
 }
 

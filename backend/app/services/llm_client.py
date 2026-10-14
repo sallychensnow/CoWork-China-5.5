@@ -10,18 +10,18 @@ logger = logging.getLogger(__name__)
 
 # China-region LLM endpoints (keyed by model id)
 LLM_CONFIGS = {
-    "qwen3-235b-a22b": {
-        "base_url": "https://llm-epvjbnzw1zc7ogds.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-        "model": "qwen3-235b-a22b",
-        "env_key": "DASHSCOPE_API_KEY",
-    },
     "qwen-plus": {
-        "base_url": "https://llm-epvjbnzw1zc7ogds.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "model": "qwen-plus",
         "env_key": "DASHSCOPE_API_KEY",
     },
+    "qwen-max": {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen-max",
+        "env_key": "DASHSCOPE_API_KEY",
+    },
     "qwen-turbo": {
-        "base_url": "https://llm-epvjbnzw1zc7ogds.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "model": "qwen-turbo",
         "env_key": "DASHSCOPE_API_KEY",
     },
@@ -40,12 +40,12 @@ LLM_CONFIGS = {
 
 async def call_llm_stream(
     messages: list[dict],
-    model: str = "qwen3-235b-a22b",
+    model: str = "qwen-plus",
     tools: list[dict] | None = None,
     temperature: float = 0.7,
 ) -> AsyncGenerator[str, None]:
     """Stream LLM response. Yields JSON strings: {"content": "..."} or {"tool_calls": [...]}."""
-    config = LLM_CONFIGS.get(model, LLM_CONFIGS["qwen3-235b-a22b"])
+    config = LLM_CONFIGS.get(model, LLM_CONFIGS["qwen-plus"])
     api_key = os.environ.get(config["env_key"], "")
 
     url = f"{config['base_url']}/chat/completions"
@@ -122,12 +122,12 @@ async def call_llm_stream(
 
 async def call_llm_sync(
     messages: list[dict],
-    model: str = "qwen3-235b-a22b",
+    model: str = "qwen-plus",
     tools: list[dict] | None = None,
     temperature: float = 0.7,
 ) -> dict:
     """Non-streaming LLM call. Returns the full response message dict."""
-    config = LLM_CONFIGS.get(model, LLM_CONFIGS["qwen3-235b-a22b"])
+    config = LLM_CONFIGS.get(model, LLM_CONFIGS["qwen-plus"])
     api_key = os.environ.get(config["env_key"], "")
 
     url = f"{config['base_url']}/chat/completions"

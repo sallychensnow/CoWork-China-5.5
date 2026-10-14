@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 class AgentConfig(BaseModel):
-    model: str = "qwen3-235b-a22b"
+    model: str = "qwen-plus"
     provider: str = "DashScope"
     backend: str = "External API"
     deep_research: bool = False
@@ -33,10 +33,10 @@ DEFAULT_BACKEND = "External API"
 MODEL_PROVIDERS = {
     "DashScope": {
         "backend": "External API",
-        "base_url": "https://llm-epvjbnzw1zc7ogds.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "models": [
-            {"id": "qwen3-235b-a22b", "name": "Qwen-Max", "context": "32K", "description": "最强推理，适合复杂分析"},
-            {"id": "qwen-plus", "name": "Qwen-Plus", "context": "128K", "description": "长上下文，性价比高"},
+            {"id": "qwen-plus", "name": "Qwen-Plus", "context": "128K", "description": "长上下文，性价比高，推荐默认使用"},
+            {"id": "qwen-max", "name": "Qwen-Max", "context": "32K", "description": "最强推理，适合复杂分析"},
             {"id": "qwen-turbo", "name": "Qwen-Turbo", "context": "8K", "description": "极速响应，简单任务"},
         ],
     },
@@ -159,3 +159,91 @@ async def set_temperature(payload: dict):
     temp = payload.get("temperature", 0.7)
     _current_config.temperature = max(0.0, min(1.0, float(temp)))
     return {"success": True, "temperature": _current_config.temperature}
+
+
+@router.get("/user-info")
+async def get_user_info(request: Request):
+    """Return current Snowflake user identity: org, account, user, email."""
+    import os
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Defaults from SPCS headers
+    sf_user = request.headers.get("Sf-Context-Current-User", "")
+    if not sf_user:
+        sf_user = request.headers.get("x-snowflake-user", "")
+
+    result = {
+        "user": sf_user.strip('"') if sf_user else "",
+        "email": "",
+        "account": os.environ.get("SNOWFLAKE_ACCOUNT", ""),
+        "org": "",
+        "role": "",
+        "warehouse": "",
+    }
+
+    # Query Snowflake for full identity
+    try:
+        import snowflake.connector
+        token_path = "/snowflake/session/token"
+        if os.path.exists(token_path):
+            with open(token_path) as f:
+                token = f.read().strip()
+            host = os.environ.get("SNOWFLAKE_HOST", "")
+            account = os.environ.get("SNOWFLAKE_ACCOUNT", "")
+            if not account and host:
+                account = host.split(".")[0]
+            conn = snowflake.connector.connect(
+                account=account, host=host, authenticator="oauth", token=token,
+                database="COWORK", schema="APP",
+                warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COWORK_WH"),
+            )
+        else:
+            conn = snowflake.connector.connect(connection_name="kr47337")
+
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                CURRENT_USER() AS user_name,
+                CURRENT_ACCOUNT_NAME() AS account_name,
+                CURRENT_ORGANIZATION_NAME() AS org_name,
+                CURRENT_ROLE() AS role_name,
+                CURRENT_WAREHOUSE() AS warehouse_name
+        """)
+        row = cur.fetchone()
+        if row:
+            # In SPCS, CURRENT_USER() returns service owner, not the login user.
+            # Only use it as fallback if no header-based user was found.
+            if not result["user"]:
+                result["user"] = row[0] or ""
+            result["account"] = row[1] or result["account"]
+            result["org"] = row[2] or ""
+            result["role"] = row[3] or ""
+            result["warehouse"] = row[4] or ""
+
+        # Get email and display name via SHOW USERS
+        # Use the header-based user (real login user), not CURRENT_USER() (service owner)
+        try:
+            user_name = result["user"]
+            cur.execute(f"SHOW USERS LIKE '{user_name}'")
+            row = cur.fetchone()
+            if row:
+                # SHOW USERS columns: name(0), created_on(1), login_name(2), display_name(3),
+                # first_name(4), last_name(5), email(6), ...
+                email = str(row[6]).strip() if row[6] and str(row[6]).strip().lower() != "null" else ""
+                first_name = str(row[4]).strip() if row[4] and str(row[4]).strip().lower() != "null" else ""
+                last_name = str(row[5]).strip() if row[5] and str(row[5]).strip().lower() != "null" else ""
+                if email:
+                    result["email"] = email
+                # Build human-readable display name from first + last
+                display_parts = [p for p in [first_name, last_name] if p]
+                if display_parts:
+                    result["display_name"] = " ".join(display_parts)
+        except Exception as e:
+            logger.debug(f"SHOW USERS failed (ok): {e}")
+
+        conn.close()
+    except Exception as e:
+        logger.warning(f"user-info Snowflake query failed: {e}")
+
+    return result

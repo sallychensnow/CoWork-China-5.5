@@ -15,7 +15,7 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     skill_trigger: str | None = None
     deep_research: bool = False
-    model: str = "qwen3-235b-a22b"
+    model: str = "qwen-plus"
     agent_id: str | None = None
 
 

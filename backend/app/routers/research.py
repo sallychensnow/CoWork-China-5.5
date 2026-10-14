@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 _tasks: dict[str, dict] = {}
 
 # Hard timeout for the entire research operation
-_RESEARCH_TIMEOUT = 180  # 3 minutes
+# ArcticSwarm needs more time than the simple planner-researcher-synthesizer pipeline
+_RESEARCH_TIMEOUT = 600  # 10 minutes
 
 
 class ResearchRequest(BaseModel):

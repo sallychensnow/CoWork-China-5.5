@@ -16,7 +16,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_DASHSCOPE_URL = "https://llm-epvjbnzw1zc7ogds.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+_DASHSCOPE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 _MODEL = "qwen-plus"
 _CALL_TIMEOUT = 90  # seconds per LLM call (Synthesizer needs more time for long inputs)
 

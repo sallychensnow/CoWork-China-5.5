@@ -163,10 +163,10 @@ export default function MessageBubble({ role, content, displayContent, skillName
         {toolResults && toolResults.map((tr) => {
           if (!tr.display) return null;
           if (tr.display.type === 'chart') {
-            return <ChartCard key={tr.call_id} data={tr.display.data as ChartData} />;
+            return <ChartCard key={tr.call_id} data={tr.display.data as ChartData} sql={tr.display.sql} />;
           }
           if (tr.display.type === 'table') {
-            return <TableCard key={tr.call_id} data={tr.display.data as TableData} />;
+            return <TableCard key={tr.call_id} data={tr.display.data as TableData} sql={tr.display.sql} />;
           }
           return null;
         })}

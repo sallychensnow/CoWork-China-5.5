@@ -120,4 +120,60 @@ export const api = {
     const res = await fetch(`${API_BASE}/research/status/${taskId}`);
     return res.json();
   },
+
+  // Semantic View Builder
+  async svList(database = 'COWORK') {
+    const res = await fetch(`${API_BASE}/sv/list?database=${database}`);
+    return res.json();
+  },
+  async svListTables(database: string, schema: string) {
+    const res = await fetch(`${API_BASE}/sv/tables?database=${database}&schema=${schema}`);
+    return res.json();
+  },
+  async svExtractMetadata(tables: Array<{database: string; schema: string; table: string}>) {
+    const res = await fetch(`${API_BASE}/sv/extract-metadata`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tables }),
+    });
+    return res.json();
+  },
+  async svInferPK(database: string, schema: string, table: string, hintColumns?: string[]) {
+    const res = await fetch(`${API_BASE}/sv/infer-pk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ database, schema_name: schema, table, hint_columns: hintColumns }),
+    });
+    return res.json();
+  },
+  async svGenerate(payload: object) {
+    const res = await fetch(`${API_BASE}/sv/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async svValidate(yamlContent: string) {
+    const res = await fetch(`${API_BASE}/sv/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yaml_content: yamlContent }),
+    });
+    return res.json();
+  },
+  async svDeploy(payload: object) {
+    const res = await fetch(`${API_BASE}/sv/deploy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+  async svDelete(name: string, database: string, schema: string) {
+    const res = await fetch(`${API_BASE}/sv/${name}?database=${database}&schema=${schema}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
 };

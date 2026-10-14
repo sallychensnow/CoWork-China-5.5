@@ -28,7 +28,7 @@ def _get_connection():
         )
         return conn
     # Local dev
-    return snowflake.connector.connect(connection_name='china_dev')
+    return snowflake.connector.connect(connection_name='kr47337')
 
 
 def _load_from_db() -> list[dict]:
@@ -101,24 +101,24 @@ class SkillsEngine:
             cur = conn.cursor()
             cur.execute("""
                 MERGE INTO COWORK.APP.SKILLS t
-                USING (SELECT %s AS ID, %s AS NAME, %s AS DESCRIPTION, %s AS TRIGGER_TEXT,
+                USING (SELECT %s AS NAME, %s AS DESCRIPTION, %s AS TRIGGER_TEXT,
                        %s AS ICON, %s AS CATEGORY, %s AS PROMPT, %s AS AGENT_ID, %s AS IS_GLOBAL) s
-                ON t.ID = s.ID
+                ON t.NAME = s.NAME
                 WHEN MATCHED THEN UPDATE SET
-                    NAME=s.NAME, DESCRIPTION=s.DESCRIPTION, TRIGGER_TEXT=s.TRIGGER_TEXT,
+                    DESCRIPTION=s.DESCRIPTION, TRIGGER_TEXT=s.TRIGGER_TEXT,
                     ICON=s.ICON, CATEGORY=s.CATEGORY, PROMPT=s.PROMPT,
                     AGENT_ID=s.AGENT_ID, IS_GLOBAL=s.IS_GLOBAL
-                WHEN NOT MATCHED THEN INSERT (ID, NAME, DESCRIPTION, TRIGGER_TEXT, ICON, CATEGORY, PROMPT, AGENT_ID, IS_GLOBAL)
-                    VALUES (s.ID, s.NAME, s.DESCRIPTION, s.TRIGGER_TEXT, s.ICON, s.CATEGORY, s.PROMPT, s.AGENT_ID, s.IS_GLOBAL)
+                WHEN NOT MATCHED THEN INSERT (NAME, DESCRIPTION, TRIGGER_TEXT, ICON, CATEGORY, PROMPT, AGENT_ID, IS_GLOBAL)
+                    VALUES (s.NAME, s.DESCRIPTION, s.TRIGGER_TEXT, s.ICON, s.CATEGORY, s.PROMPT, s.AGENT_ID, s.IS_GLOBAL)
             """, (
-                skill_data["id"], skill_data["name"], skill_data.get("description", ""),
+                skill_data["name"], skill_data.get("description", ""),
                 skill_data.get("trigger", skill_data["name"]), skill_data.get("icon", "⚡"),
                 skill_data.get("category", "general"), skill_data.get("prompt", ""),
-                skill_data.get("agent_id"), skill_data.get("is_global", True),
+                skill_data.get("agent_id", ""), skill_data.get("is_global", True),
             ))
             conn.close()
             _cache_ts = 0  # invalidate cache
-            return {"status": "saved", "id": skill_data["id"]}
+            return {"status": "saved", "name": skill_data["name"]}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 

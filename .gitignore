@@ -11,8 +11,7 @@ venv/
 # ArcticSwarm (vendored separately, not part of this repo)
 ArcticSwarm/
 
-# Dev docs & session files
-docs/
+# Dev session files
 AGENT.md
 session.md
 skills/

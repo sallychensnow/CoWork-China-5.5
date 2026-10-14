@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, ScatterChart, Scatter, Cell, PieChart, Pie
@@ -11,6 +12,7 @@ const COLORS = ['#ff6b6b', '#ffaa5c', '#4cd964', '#29b5e8', '#a78bfa', '#f97316'
 
 interface ChartCardProps {
   data: ChartData;
+  sql?: string;
 }
 
 // Custom legend with round dots like Global CoWork
@@ -45,8 +47,9 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   );
 }
 
-export default function ChartCard({ data }: ChartCardProps) {
+export default function ChartCard({ data, sql }: ChartCardProps) {
   const { type, title, x_label, y_label, labels, datasets } = data;
+  const [showSql, setShowSql] = useState(false);
 
   // Transform data for recharts
   const chartData = (labels || []).map((label, i) => {
@@ -248,6 +251,13 @@ export default function ChartCard({ data }: ChartCardProps) {
         {renderChart()}
       </div>
 
+      {/* SQL panel */}
+      {showSql && sql && (
+        <div className="px-5 py-3 border-t border-border-subtle bg-bg-secondary">
+          <pre className="text-xs text-text-secondary font-mono whitespace-pre-wrap overflow-x-auto">{sql}</pre>
+        </div>
+      )}
+
       {/* Action bar */}
       <div className="flex items-center justify-between px-5 py-3 border-t border-border-subtle">
         <div className="flex items-center gap-3">
@@ -257,14 +267,20 @@ export default function ChartCard({ data }: ChartCardProps) {
           <button className="p-1.5 rounded hover:bg-bg-hover text-text-muted" title="Link">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
           </button>
-          <button className="p-1.5 rounded hover:bg-bg-hover text-text-muted" title="More">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
-          </button>
         </div>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle text-xs text-text-secondary hover:bg-bg-hover font-medium">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17l9.2-9.2M17 17V7H7"/></svg>
-          Explore
-        </button>
+        {sql && (
+          <button
+            onClick={() => setShowSql(!showSql)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              showSql
+                ? 'border-accent/40 text-accent bg-accent/10'
+                : 'border-border-subtle text-text-secondary hover:bg-bg-hover'
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            View SQL
+          </button>
+        )}
       </div>
     </div>
   );

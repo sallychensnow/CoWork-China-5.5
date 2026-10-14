@@ -70,10 +70,30 @@ export default function UserMenu({ onClose }: UserMenuProps) {
             </button>
           </div>
         </div>
-        {/* Account */}
-        <div className="pt-3 border-t border-border-subtle flex items-center justify-between">
-          <span className="text-sm text-text-secondary">{t('settings.account')}</span>
-          <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-1 rounded">{user.account || 'XGFXMUS-WR98488'}</span>
+        {/* Account — org.account */}
+        <div className="pt-3 border-t border-border-subtle space-y-3">
+          {user.org && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Organization</span>
+              <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-1 rounded">{user.org}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-secondary">{t('settings.account')}</span>
+            <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-1 rounded">
+              {user.org && user.account ? `${user.org}-${user.account}` : user.account || '-'}
+            </span>
+          </div>
+          {user.role && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-text-secondary">Role</span>
+              <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-1 rounded">{user.role}</span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-secondary">Warehouse</span>
+            <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-1 rounded">{user.warehouse || '-'}</span>
+          </div>
         </div>
         <button
           onClick={() => { window.location.href = '/_oauth/logout'; }}

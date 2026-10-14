@@ -13,3 +13,5 @@ requests>=2.28.0
 markdown>=3.5
 sqlparse>=0.5
 prompt_toolkit>=3.0
+# Semantic View Builder deps
+sqlglot>=26.0

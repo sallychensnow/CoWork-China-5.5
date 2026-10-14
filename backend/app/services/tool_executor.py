@@ -1,5 +1,6 @@
 """Tool Executor - dispatches tool calls and formats results with display hints."""
 import json
+import os
 import traceback
 from typing import Any
 
@@ -257,9 +258,26 @@ async def _exec_deep_research(args: dict, agent_config: dict | None = None, on_p
             enriched_query = query
             print("[RESEARCH] No internal data available, using raw query", file=sys.stderr, flush=True)
 
-        # Step 3: Run multi-agent research
-        from app.services.deep_research import run_deep_research
-        result = await run_deep_research(enriched_query, on_progress=on_progress)
+        # Step 3: Run multi-agent research (ArcticSwarm or fallback)
+        use_arcticswarm = os.environ.get("USE_ARCTICSWARM", "true").lower() == "true"
+
+        if use_arcticswarm:
+            print("[RESEARCH] Using ArcticSwarm engine", file=sys.stderr, flush=True)
+            from app.services.swarm_bridge import run_arcticswarm_research
+            enable_web = "web_search" in ((agent_config or {}).get("tools") or [])
+            result = await run_arcticswarm_research(
+                query=enriched_query,
+                max_teammates=3,
+                timeout_seconds=280,
+                on_progress=on_progress,
+                agent_config=agent_config,
+                enable_web_search=enable_web,
+            )
+        else:
+            print("[RESEARCH] Using simple deep_research engine (fallback)", file=sys.stderr, flush=True)
+            from app.services.deep_research import run_deep_research
+            result = await run_deep_research(enriched_query, on_progress=on_progress)
+
         print(f"[RESEARCH] Result status: {result.get('status')}", file=sys.stderr, flush=True)
         status = result.get("status")
         if status == "completed":
@@ -291,10 +309,10 @@ async def _exec_web_search(args: dict) -> dict:
         return {"success": False, "result": "DASHSCOPE_API_KEY not set", "display": None}
 
     try:
-        url = "https://llm-epvjbnzw1zc7ogds.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions"
+        url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {
-            "model": "qwen3-235b-a22b",
+            "model": "qwen-plus",
             "messages": [
                 {"role": "system", "content": "你是一个联网搜索助手。请搜索最新信息并以结构化方式返回搜索结果摘要。每个结果包含标题、摘要和来源。"},
                 {"role": "user", "content": query},

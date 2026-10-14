@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import chat, skills, agent_config, sources, research, conversations, agents
+from app.routers import chat, skills, agent_config, sources, research, conversations, agents, sv
 
 app = FastAPI(title="CoWork China API", version="0.3.0")
 
@@ -24,6 +24,7 @@ app.include_router(agent_config.router, prefix="/api/agent", tags=["agent"])
 app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
 app.include_router(conversations.router, prefix="/api/conversations", tags=["conversations"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(sv.router, prefix="/api/sv", tags=["semantic-view"])
 
 
 @app.get("/health")

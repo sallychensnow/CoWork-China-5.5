@@ -26,7 +26,7 @@ def _get_conn():
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COWORK_WH"),
         )
     else:
-        return snowflake.connector.connect(connection_name="china_dev")
+        return snowflake.connector.connect(connection_name="kr47337")
 
 
 class AgentDefinition(BaseModel):
@@ -36,6 +36,7 @@ class AgentDefinition(BaseModel):
     tools: list[str] = []
     semantic_models: list[str] = []
     search_services: list[str] = []
+    skills: list[str] = []
     system_prompt: str = ""
     icon: str = "🤖"
 
@@ -47,7 +48,7 @@ async def list_agents():
     try:
         conn = _get_conn()
         cur = conn.cursor()
-        cur.execute("SELECT id, name, description, semantic_models, search_services, tools, system_prompt, icon FROM COWORK.APP.AGENTS ORDER BY created_at")
+        cur.execute("SELECT id, name, description, semantic_models, search_services, tools, system_prompt, icon, skills FROM COWORK.APP.AGENTS ORDER BY created_at")
         rows = cur.fetchall()
         conn.close()
         agents = []
@@ -61,6 +62,7 @@ async def list_agents():
                 "tools": json.loads(r[5]) if r[5] else [],
                 "system_prompt": r[6] or "",
                 "icon": r[7] or "🤖",
+                "skills": json.loads(r[8]) if r[8] else [],
             })
         return {"agents": agents, "active": _active_agent_id}
     except Exception as e:
@@ -73,7 +75,7 @@ async def get_agent(agent_id: str):
     try:
         conn = _get_conn()
         cur = conn.cursor()
-        cur.execute("SELECT id, name, description, semantic_models, search_services, tools, system_prompt, icon FROM COWORK.APP.AGENTS WHERE id = %s", (agent_id,))
+        cur.execute("SELECT id, name, description, semantic_models, search_services, tools, system_prompt, icon, skills FROM COWORK.APP.AGENTS WHERE id = %s", (agent_id,))
         r = cur.fetchone()
         conn.close()
         if not r:
@@ -84,6 +86,7 @@ async def get_agent(agent_id: str):
             "search_services": json.loads(r[4]) if r[4] else [],
             "tools": json.loads(r[5]) if r[5] else [],
             "system_prompt": r[6] or "", "icon": r[7] or "🤖",
+            "skills": json.loads(r[8]) if r[8] else [],
         }
     except Exception as e:
         return {"error": str(e)}
@@ -113,11 +116,12 @@ async def create_agent(agent: AgentDefinition):
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            """INSERT INTO COWORK.APP.AGENTS (id, name, description, semantic_models, search_services, tools, system_prompt, icon)
-               SELECT %s, %s, %s, PARSE_JSON(%s), PARSE_JSON(%s), PARSE_JSON(%s), %s, %s""",
+            """INSERT INTO COWORK.APP.AGENTS (id, name, description, semantic_models, search_services, tools, system_prompt, icon, skills)
+               SELECT %s, %s, %s, PARSE_JSON(%s), PARSE_JSON(%s), PARSE_JSON(%s), %s, %s, PARSE_JSON(%s)""",
             (agent.id, agent.name, agent.description,
              json.dumps(agent.semantic_models), json.dumps(agent.search_services),
-             json.dumps(agent.tools), agent.system_prompt, agent.icon)
+             json.dumps(agent.tools), agent.system_prompt, agent.icon,
+             json.dumps(agent.skills))
         )
         conn.close()
         return {"success": True, "agent": agent.model_dump()}
@@ -134,10 +138,12 @@ async def update_agent(agent_id: str, agent: AgentDefinition):
         cur.execute(
             """UPDATE COWORK.APP.AGENTS SET name=%s, description=%s,
                semantic_models=PARSE_JSON(%s), search_services=PARSE_JSON(%s),
-               tools=PARSE_JSON(%s), system_prompt=%s, icon=%s WHERE id=%s""",
+               tools=PARSE_JSON(%s), system_prompt=%s, icon=%s,
+               skills=PARSE_JSON(%s) WHERE id=%s""",
             (agent.name, agent.description,
              json.dumps(agent.semantic_models), json.dumps(agent.search_services),
-             json.dumps(agent.tools), agent.system_prompt, agent.icon, agent_id)
+             json.dumps(agent.tools), agent.system_prompt, agent.icon,
+             json.dumps(agent.skills), agent_id)
         )
         conn.close()
         return {"success": True, "agent": agent.model_dump()}

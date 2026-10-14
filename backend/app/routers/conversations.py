@@ -1,7 +1,7 @@
 """Conversations router - persistence of chat sessions and messages."""
 import uuid
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -46,7 +46,7 @@ def _get_connection():
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COWORK_WH"),
         )
         return conn
-    return snowflake.connector.connect(connection_name='china_dev')
+    return snowflake.connector.connect(connection_name='kr47337')
 
 
 def _ensure_tables(conn):
@@ -80,6 +80,19 @@ def _ensure_tables(conn):
 _tables_ensured = False
 
 
+def _resolve_user(request: Request) -> str:
+    """Resolve the real login user from SPCS header, falling back to 'default'.
+
+    In SPCS, the Sf-Context-Current-User header carries the actual login user,
+    while CURRENT_USER() returns the service owner (e.g. COWORK_SERVICE).
+    """
+    user = (
+        request.headers.get("Sf-Context-Current-User", "")
+        or request.headers.get("sf-context-current-user", "")
+    ).strip()
+    return user.upper() if user else "default"
+
+
 def _ensure_once():
     global _tables_ensured
     if not _tables_ensured:
@@ -93,18 +106,19 @@ def _ensure_once():
 
 
 @router.get("/sessions")
-async def list_sessions(user_id: str = "default", limit: int = 20):
-    """List recent chat sessions."""
+async def list_sessions(request: Request, limit: int = 20):
+    """List recent chat sessions for the current user."""
     _ensure_once()
+    user_id = _resolve_user(request)
     try:
         conn = _get_connection()
         cur = conn.cursor()
         cur.execute(f"""
         SELECT session_id, title, agent_id, updated_at, message_count
         FROM {CONV_SCHEMA}.CHAT_SESSIONS
-        WHERE user_id = '{user_id}'
+        WHERE user_id = %s
         ORDER BY updated_at DESC LIMIT {limit}
-        """)
+        """, (user_id,))
         rows = cur.fetchall()
         sessions = [
             {
@@ -123,19 +137,20 @@ async def list_sessions(user_id: str = "default", limit: int = 20):
 
 
 @router.post("/sessions")
-async def create_session(req: CreateSessionRequest):
-    """Create a new chat session."""
+async def create_session(req: CreateSessionRequest, request: Request):
+    """Create a new chat session scoped to the current user."""
     _ensure_once()
     session_id = str(uuid.uuid4())
+    user_id = _resolve_user(request)
     try:
         conn = _get_connection()
         cur = conn.cursor()
         title_escaped = req.title.replace("'", "''")
         agent_id = f"'{req.agent_id}'" if req.agent_id else "NULL"
         cur.execute(f"""
-        INSERT INTO {CONV_SCHEMA}.CHAT_SESSIONS (session_id, title, agent_id)
-        VALUES ('{session_id}', '{title_escaped}', {agent_id})
-        """)
+        INSERT INTO {CONV_SCHEMA}.CHAT_SESSIONS (session_id, user_id, title, agent_id)
+        VALUES ('{session_id}', %s, '{title_escaped}', {agent_id})
+        """, (user_id,))
         conn.close()
         return {"success": True, "session_id": session_id}
     except Exception as e:
@@ -143,16 +158,25 @@ async def create_session(req: CreateSessionRequest):
 
 
 @router.get("/sessions/{session_id}/messages")
-async def get_messages(session_id: str):
-    """Get all messages for a session."""
+async def get_messages(session_id: str, request: Request):
+    """Get all messages for a session (only if owned by current user)."""
+    user_id = _resolve_user(request)
     try:
         conn = _get_connection()
         cur = conn.cursor()
+        # Verify session belongs to this user
+        cur.execute(f"""
+        SELECT 1 FROM {CONV_SCHEMA}.CHAT_SESSIONS
+        WHERE session_id = %s AND user_id = %s
+        """, (session_id, user_id))
+        if not cur.fetchone():
+            conn.close()
+            return {"messages": [], "error": "Session not found"}
         cur.execute(f"""
         SELECT message_id, role, content, tool_info, query_result, created_at
         FROM {CONV_SCHEMA}.CHAT_MESSAGES
-        WHERE session_id = '{session_id}' ORDER BY created_at ASC
-        """)
+        WHERE session_id = %s ORDER BY created_at ASC
+        """, (session_id,))
         rows = cur.fetchall()
         messages = [
             {
@@ -200,16 +224,17 @@ async def save_message(req: SaveMessageRequest):
 
 
 @router.put("/sessions/{session_id}/title")
-async def update_title(session_id: str, payload: dict):
-    """Update session title."""
+async def update_title(session_id: str, payload: dict, request: Request):
+    """Update session title (only if owned by current user)."""
     title = payload.get("title", "").replace("'", "''")
+    user_id = _resolve_user(request)
     try:
         conn = _get_connection()
         cur = conn.cursor()
         cur.execute(f"""
         UPDATE {CONV_SCHEMA}.CHAT_SESSIONS SET title = '{title}', updated_at = CURRENT_TIMESTAMP()
-        WHERE session_id = '{session_id}'
-        """)
+        WHERE session_id = %s AND user_id = %s
+        """, (session_id, user_id))
         conn.close()
         return {"success": True}
     except Exception as e:
@@ -217,13 +242,22 @@ async def update_title(session_id: str, payload: dict):
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
-    """Delete a session and its messages."""
+async def delete_session(session_id: str, request: Request):
+    """Delete a session and its messages (only if owned by current user)."""
+    user_id = _resolve_user(request)
     try:
         conn = _get_connection()
         cur = conn.cursor()
-        cur.execute(f"DELETE FROM {CONV_SCHEMA}.CHAT_MESSAGES WHERE session_id = '{session_id}'")
-        cur.execute(f"DELETE FROM {CONV_SCHEMA}.CHAT_SESSIONS WHERE session_id = '{session_id}'")
+        # Only delete if session belongs to this user
+        cur.execute(f"""
+        SELECT 1 FROM {CONV_SCHEMA}.CHAT_SESSIONS
+        WHERE session_id = %s AND user_id = %s
+        """, (session_id, user_id))
+        if not cur.fetchone():
+            conn.close()
+            return {"success": False, "error": "Session not found"}
+        cur.execute(f"DELETE FROM {CONV_SCHEMA}.CHAT_MESSAGES WHERE session_id = %s", (session_id,))
+        cur.execute(f"DELETE FROM {CONV_SCHEMA}.CHAT_SESSIONS WHERE session_id = %s", (session_id,))
         conn.close()
         return {"success": True}
     except Exception as e:
@@ -231,10 +265,11 @@ async def delete_session(session_id: str):
 
 
 @router.get("/search")
-async def search_conversations(q: str, user_id: str = "default", limit: int = 20):
-    """Search across sessions (title) and messages (content)."""
+async def search_conversations(q: str, request: Request, limit: int = 20):
+    """Search across sessions (title) and messages (content) for the current user."""
     if not q.strip():
         return {"results": []}
+    user_id = _resolve_user(request)
     try:
         conn = _get_connection()
         cur = conn.cursor()
@@ -244,12 +279,12 @@ async def search_conversations(q: str, user_id: str = "default", limit: int = 20
             m.content AS matched_content, m.role
         FROM {CONV_SCHEMA}.CHAT_SESSIONS s
         JOIN {CONV_SCHEMA}.CHAT_MESSAGES m ON s.session_id = m.session_id
-        WHERE s.user_id = '{user_id}'
+        WHERE s.user_id = %s
           AND (LOWER(s.title) LIKE LOWER('%{query_escaped}%')
                OR LOWER(m.content) LIKE LOWER('%{query_escaped}%'))
         ORDER BY s.updated_at DESC
         LIMIT {limit}
-        """)
+        """, (user_id,))
         rows = cur.fetchall()
         results = [
             {
