@@ -1,0 +1,100 @@
+name: procurement_model
+description: "采购供应链分析语义模型 - 覆盖采购订单、供应商和物料数据"
+tables:
+  - name: PROCUREMENT_PO
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: PROCUREMENT_PO
+    description: "采购订单表，记录所有采购订单"
+    dimensions:
+      - name: PO_ID
+        description: "采购订单号"
+        expr: PO_ID
+      - name: MATERIAL_NAME
+        description: "物料名称"
+        expr: MATERIAL_NAME
+      - name: STATUS
+        description: "订单状态：已收货、生产中、运输中、待确认"
+        expr: STATUS
+    time_dimensions:
+      - name: ORDER_DATE
+        description: "下单日期"
+        expr: ORDER_DATE
+        data_type: DATE
+    measures:
+      - name: PO_COUNT
+        description: "采购订单数量"
+        expr: COUNT(PO_ID)
+      - name: TOTAL_PO_AMOUNT
+        description: "采购总金额（元）"
+        expr: SUM(TOTAL_AMOUNT)
+      - name: AVG_PO_AMOUNT
+        description: "平均采购金额"
+        expr: AVG(TOTAL_AMOUNT)
+      - name: ON_TIME_RATE
+        description: "交期准时率（实际交货≤承诺交期的比例）"
+        expr: COUNT(CASE WHEN ACTUAL_DELIVERY_DATE <= PROMISED_DATE THEN 1 END)*100.0/COUNT(*)
+
+  - name: PROCUREMENT_SUPPLIERS
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: PROCUREMENT_SUPPLIERS
+    description: "供应商表，记录合格供应商信息"
+    dimensions:
+      - name: SUPPLIER_ID
+        description: "供应商编号"
+        expr: SUPPLIER_ID
+      - name: SUPPLIER_NAME
+        description: "供应商名称"
+        expr: SUPPLIER_NAME
+      - name: CITY
+        description: "所在城市"
+        expr: CITY
+      - name: CATEGORY
+        description: "供应品类"
+        expr: CATEGORY
+      - name: RATING
+        description: "供应商评级：A、B、C"
+        expr: RATING
+    measures:
+      - name: SUPPLIER_COUNT
+        description: "供应商数量"
+        expr: COUNT(SUPPLIER_ID)
+
+  - name: PROCUREMENT_MATERIALS
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: PROCUREMENT_MATERIALS
+    description: "物料表，记录在管物料信息"
+    dimensions:
+      - name: MATERIAL_ID
+        description: "物料编号"
+        expr: MATERIAL_ID
+      - name: MATERIAL_NAME
+        description: "物料名称"
+        expr: MATERIAL_NAME
+      - name: MATERIAL_CATEGORY
+        description: "物料类别"
+        expr: MATERIAL_CATEGORY
+    measures:
+      - name: MATERIAL_COUNT
+        description: "物料种类数"
+        expr: COUNT(MATERIAL_ID)
+      - name: BELOW_SAFETY_COUNT
+        description: "低于安全库存的物料数"
+        expr: COUNT(CASE WHEN CURRENT_STOCK < SAFETY_STOCK THEN 1 END)
+
+verified_queries:
+  - question: "各供应商的交期达成率"
+    sql: "SELECT s.SUPPLIER_NAME, COUNT(p.PO_ID) AS PO_CNT, ROUND(COUNT(CASE WHEN p.ACTUAL_DELIVERY_DATE <= p.PROMISED_DATE THEN 1 END)*100.0/COUNT(*),1) AS ON_TIME_PCT FROM COWORK.DATA.PROCUREMENT_PO p JOIN COWORK.DATA.PROCUREMENT_SUPPLIERS s ON p.SUPPLIER_ID = s.SUPPLIER_ID GROUP BY s.SUPPLIER_NAME ORDER BY ON_TIME_PCT ASC LIMIT 10"
+  - question: "采购金额最高的物料TOP10"
+    sql: "SELECT MATERIAL_NAME, ROUND(SUM(TOTAL_AMOUNT),2) AS TOTAL_AMT FROM COWORK.DATA.PROCUREMENT_PO GROUP BY MATERIAL_NAME ORDER BY TOTAL_AMT DESC LIMIT 10"
+  - question: "库存低于安全线的物料清单"
+    sql: "SELECT MATERIAL_NAME, MATERIAL_CATEGORY, CURRENT_STOCK, SAFETY_STOCK, SAFETY_STOCK - CURRENT_STOCK AS SHORTAGE FROM COWORK.DATA.PROCUREMENT_MATERIALS WHERE CURRENT_STOCK < SAFETY_STOCK ORDER BY SHORTAGE DESC"
+  - question: "每月采购金额趋势"
+    sql: "SELECT DATE_TRUNC('MONTH', ORDER_DATE) AS MONTH, ROUND(SUM(TOTAL_AMOUNT),2) AS AMOUNT FROM COWORK.DATA.PROCUREMENT_PO GROUP BY MONTH ORDER BY MONTH"
+  - question: "各品类的采购占比"
+    sql: "SELECT s.CATEGORY, ROUND(SUM(p.TOTAL_AMOUNT),2) AS AMT, ROUND(SUM(p.TOTAL_AMOUNT)*100.0/(SELECT SUM(TOTAL_AMOUNT) FROM COWORK.DATA.PROCUREMENT_PO),1) AS PCT FROM COWORK.DATA.PROCUREMENT_PO p JOIN COWORK.DATA.PROCUREMENT_SUPPLIERS s ON p.SUPPLIER_ID = s.SUPPLIER_ID GROUP BY s.CATEGORY ORDER BY AMT DESC"

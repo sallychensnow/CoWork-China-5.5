@@ -167,7 +167,7 @@ Agent 配置中默认启用，但需要用户在 PlusMenu 手动开启当次对�
 
 | 配置项 | 值 |
 |--------|-----|
-| 账号 | SFCSUPPORTCHINA-SALLYTESTING (kr47337.cn-northwest-1) |
+| 账号 | <your_account> |
 | 数据库 | COWORK |
 | Schema | APP (应用配置), DATA (业务数据) |
 | 仓库 | COWORK_WH (XSMALL) |

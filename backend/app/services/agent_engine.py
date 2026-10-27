@@ -93,9 +93,19 @@ async def run_agent(request: ChatRequest) -> AsyncGenerator[str, None]:
 
     yield json.dumps({"type": "thinking", "text": "正在思考...", "call_id": "init"})
 
+    # ── Deep Research shortcut: emit async event so frontend polls /api/research/* ──
+    if request.deep_research:
+        user_query = request.messages[-1].content if request.messages else ""
+        yield json.dumps({"type": "thinking", "text": "启动深度研究流程...", "call_id": "dr_start"})
+        yield json.dumps({
+            "type": "deep_research_async",
+            "query": user_query,
+        })
+        return
+
     # Determine which tools are available
     enabled_tools = _get_enabled_tools(request, agent_config)
-    tool_schemas = get_tool_schemas(enabled_tools) if enabled_tools else None
+    tool_schemas = get_tool_schemas(enabled_tools, agent_config=agent_config) if enabled_tools else None
 
     for round_num in range(MAX_TOOL_ROUNDS):
         content_buffer = ""

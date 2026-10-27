@@ -1,3 +1,4 @@
+import os
 """Conversations router - persistence of chat sessions and messages."""
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -46,7 +47,7 @@ def _get_connection():
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COWORK_WH"),
         )
         return conn
-    return snowflake.connector.connect(connection_name='kr47337')
+    return snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
 
 def _ensure_tables(conn):

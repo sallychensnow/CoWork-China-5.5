@@ -1,3 +1,5 @@
+> **最新部署方式 / Latest deployment (v27):** 见 [`deploy/v27/README.md`](deploy/v27/README.md) — 一键复现完整环境（表结构、演示数据、语义模型、知识库、Agent、SPCS 服务）。旧的 `deploy/*.sql` 脚本仅供参考。
+
 # CoWork — Snowflake AI Agent Platform (China Region)
 
 基于 Snowflake SPCS 的全栈 AI Agent 平台，支持多 Agent 切换、Skills 工作流、Deep Research 多智能体协作、Cortex Analyst 数据分析等能力。

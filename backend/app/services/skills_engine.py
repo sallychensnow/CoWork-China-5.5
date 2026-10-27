@@ -28,7 +28,7 @@ def _get_connection():
         )
         return conn
     # Local dev
-    return snowflake.connector.connect(connection_name='kr47337')
+    return snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
 
 def _load_from_db() -> list[dict]:

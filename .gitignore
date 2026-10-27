@@ -9,12 +9,12 @@ frontend/.next/
 venv/
 
 # ArcticSwarm (vendored separately, not part of this repo)
-ArcticSwarm/
+/ArcticSwarm/
 
 # Dev session files
 AGENT.md
 session.md
-skills/
+/skills/
 
 # OS files
 .DS_Store

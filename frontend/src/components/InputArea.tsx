@@ -7,7 +7,7 @@ import { useSettings } from '@/lib/settings';
 import type { Skill } from './SkillsPanel';
 
 interface InputAreaProps {
-  onSend: (text: string, options?: { skillPrompt?: string; skillName?: string }) => void;
+  onSend: (text: string, options?: { skillPrompt?: string; skillName?: string; deepResearch?: boolean }) => void;
   onStop?: () => void;
   isStreaming?: boolean;
   activeAgent: string;
@@ -22,6 +22,7 @@ export default function InputArea({ onSend, onStop, isStreaming, activeAgent, on
   const [slashFilter, setSlashFilter] = useState('');
   const [slashIdx, setSlashIdx] = useState(0);
   const [activeSkill, setActiveSkill] = useState<Skill | null>(null);
+  const [deepResearch, setDeepResearch] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { t } = useSettings();
 
@@ -43,7 +44,10 @@ export default function InputArea({ onSend, onStop, isStreaming, activeAgent, on
     if (!trimmed && !activeSkill) return;
     // Send with skill prompt if a skill is active
     const msg = trimmed || activeSkill?.trigger || '';
-    onSend(msg, activeSkill ? { skillPrompt: activeSkill.prompt, skillName: activeSkill.name } : undefined);
+    onSend(msg, {
+      ...(activeSkill ? { skillPrompt: activeSkill.prompt, skillName: activeSkill.name } : {}),
+      ...(deepResearch ? { deepResearch: true } : {}),
+    });
     setText('');
     setActiveSkill(null);
     setSlashOpen(false);
@@ -175,10 +179,19 @@ export default function InputArea({ onSend, onStop, isStreaming, activeAgent, on
                 onClose={() => setPlusOpen(false)}
                 activeAgent={activeAgent}
                 onSkillSelect={handleSkillSelect}
+                deepResearch={deepResearch}
+                onDeepResearchToggle={setDeepResearch}
               />
             )}
           </div>
           <AgentPicker selected={activeAgent} onSelect={onAgentChange} />
+          {deepResearch && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              Deep Research
+              <button onClick={() => setDeepResearch(false)} className="hover:text-white ml-0.5">×</button>
+            </span>
+          )}
         </div>
         {isStreaming ? (
           <button

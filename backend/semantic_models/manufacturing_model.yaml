@@ -1,5 +1,5 @@
 name: manufacturing_model
-description: "制造业生产分析语义模型 - 覆盖工单、产线和质检数据"
+description: "制造业生产分析语义模型 - 覆盖工单、产线和质检数据。质检记录通过WO_ID关联工单，通过LINE_ID关联产线。"
 tables:
   - name: MFG_WORK_ORDERS
     base_table:
@@ -9,7 +9,7 @@ tables:
     description: "生产工单表，记录每日产线生产数据"
     dimensions:
       - name: WO_ID
-        description: "工单编号"
+        description: "工单编号（主键，可关联质检记录MFG_QUALITY_RECORDS.WO_ID）"
         expr: WO_ID
       - name: LINE_NAME
         description: "产线名称"
@@ -50,7 +50,7 @@ tables:
     description: "产线表，记录产线基本信息和产能"
     dimensions:
       - name: LINE_ID
-        description: "产线编号"
+        description: "产线编号（主键，可关联质检记录MFG_QUALITY_RECORDS.LINE_ID）"
         expr: LINE_ID
       - name: LINE_NAME
         description: "产线名称"
@@ -74,11 +74,17 @@ tables:
       database: COWORK
       schema: DATA
       table: MFG_QUALITY_RECORDS
-    description: "质检记录表，记录产品质量检测数据"
+    description: "质检记录表，记录产品质量检测数据。通过WO_ID关联工单表，通过LINE_ID关联产线表。"
     dimensions:
       - name: QC_ID
         description: "质检记录编号"
         expr: QC_ID
+      - name: WO_ID
+        description: "关联工单编号（外键，关联MFG_WORK_ORDERS.WO_ID）"
+        expr: WO_ID
+      - name: LINE_ID
+        description: "关联产线编号（外键，关联MFG_PRODUCTION_LINES.LINE_ID）"
+        expr: LINE_ID
       - name: BATCH_CODE
         description: "批次号"
         expr: BATCH_CODE
@@ -118,3 +124,11 @@ verified_queries:
     sql: "SELECT LINE_NAME, SUM(PLANNED_QTY) AS PLANNED, SUM(ACTUAL_QTY) AS ACTUAL, ROUND(SUM(ACTUAL_QTY)*100.0/NULLIF(SUM(PLANNED_QTY),0),1) AS ACHIEVE_PCT FROM COWORK.DATA.MFG_WORK_ORDERS GROUP BY LINE_NAME ORDER BY ACHIEVE_PCT ASC"
   - question: "质检不合格批次明细"
     sql: "SELECT BATCH_CODE, DEFECT_TYPE, DEFECT_COUNT, SAMPLE_SIZE, INSPECTION_METHOD, INSPECTION_DATE FROM COWORK.DATA.MFG_QUALITY_RECORDS WHERE DEFECT_COUNT > 5 ORDER BY DEFECT_COUNT DESC LIMIT 20"
+  - question: "各产线缺陷数量统计"
+    sql: "SELECT pl.LINE_NAME, SUM(qr.DEFECT_COUNT) AS TOTAL_DEFECTS, COUNT(*) AS RECORD_COUNT FROM COWORK.DATA.MFG_QUALITY_RECORDS qr JOIN COWORK.DATA.MFG_PRODUCTION_LINES pl ON qr.LINE_ID = pl.LINE_ID GROUP BY pl.LINE_NAME ORDER BY TOTAL_DEFECTS DESC"
+  - question: "各产线缺陷类型分布"
+    sql: "SELECT pl.LINE_NAME, qr.DEFECT_TYPE, SUM(qr.DEFECT_COUNT) AS DEFECT_TOTAL FROM COWORK.DATA.MFG_QUALITY_RECORDS qr JOIN COWORK.DATA.MFG_PRODUCTION_LINES pl ON qr.LINE_ID = pl.LINE_ID GROUP BY pl.LINE_NAME, qr.DEFECT_TYPE ORDER BY pl.LINE_NAME, DEFECT_TOTAL DESC"
+  - question: "工单对应的质检缺陷明细"
+    sql: "SELECT wo.WO_ID, wo.LINE_NAME, wo.PRODUCTION_DATE, qr.DEFECT_TYPE, qr.DEFECT_COUNT, qr.INSPECTION_METHOD FROM COWORK.DATA.MFG_WORK_ORDERS wo JOIN COWORK.DATA.MFG_QUALITY_RECORDS qr ON wo.WO_ID = qr.WO_ID WHERE qr.DEFECT_COUNT > 0 ORDER BY wo.PRODUCTION_DATE DESC, qr.DEFECT_COUNT DESC LIMIT 50"
+  - question: "产线良品率与缺陷率对比"
+    sql: "SELECT wo.LINE_NAME, ROUND(AVG(wo.YIELD_RATE)*100,2) AS YIELD_PCT, ROUND(SUM(qr.DEFECT_COUNT)*100.0/NULLIF(SUM(qr.SAMPLE_SIZE),0),2) AS DEFECT_PCT FROM COWORK.DATA.MFG_WORK_ORDERS wo JOIN COWORK.DATA.MFG_QUALITY_RECORDS qr ON wo.WO_ID = qr.WO_ID GROUP BY wo.LINE_NAME ORDER BY YIELD_PCT ASC"

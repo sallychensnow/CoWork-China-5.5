@@ -26,7 +26,7 @@ def _get_conn():
             warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COWORK_WH"),
         )
     else:
-        return snowflake.connector.connect(connection_name="kr47337")
+        return snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
 
 class AgentDefinition(BaseModel):

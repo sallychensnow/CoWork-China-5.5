@@ -1,3 +1,4 @@
+import os
 """Agent config router - manage tools, model selection, sources, greeting."""
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Request
@@ -199,7 +200,7 @@ async def get_user_info(request: Request):
                 warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COWORK_WH"),
             )
         else:
-            conn = snowflake.connector.connect(connection_name="kr47337")
+            conn = snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
         cur = conn.cursor()
         cur.execute("""

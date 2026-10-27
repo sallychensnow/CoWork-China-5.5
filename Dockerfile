@@ -17,8 +17,14 @@ WORKDIR /app
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install ArcticSwarm (--no-deps: core deps already in requirements.txt)
-RUN pip install --no-cache-dir git+https://github.com/Snowflake-AI-Research/ArcticSwarm.git --no-deps || true
+# Install ArcticSwarm from local source (avoids GitHub network issues in China)
+COPY arcticswarm-src /tmp/arcticswarm-src
+RUN pip install --no-cache-dir --no-deps /tmp/arcticswarm-src \
+    # Copy skills + eval data (non-Python files not included by pip install)
+    && SITE=$(python -c "import arcticswarm, pathlib; print(pathlib.Path(arcticswarm.__file__).parent)") \
+    && cp -r /tmp/arcticswarm-src/arcticswarm/skills "$SITE/skills" \
+    && cp -r /tmp/arcticswarm-src/arcticswarm/eval "$SITE/eval" \
+    && rm -rf /tmp/arcticswarm-src
 
 # Copy backend (includes sv_scripts/)
 COPY backend /app/backend

@@ -30,7 +30,7 @@ def _get_connection():
         conn.cursor().execute(f"USE WAREHOUSE {os.environ.get('SNOWFLAKE_WAREHOUSE', 'COWORK_WH')}")
         return conn
     # Local dev: use connection name
-    return snowflake.connector.connect(connection_name="kr47337")
+    return snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
 
 def _get_active_search_service():
@@ -44,30 +44,85 @@ def _get_active_search_service():
 
 
 def _get_service_columns(service_fqn: str) -> list[str]:
-    """Get columns to retrieve for a given search service.
-    
-    Returns a reasonable default set of columns. The search column itself
-    is always included in results by SEARCH_PREVIEW.
+    """Get attribute columns for a search service by querying SHOW CORTEX SEARCH SERVICES.
+
+    Falls back to a safe default when the metadata query fails.
     """
-    # Known service column mappings
-    known_services = {
-        "SNOWFLAKE_PROD_USER1.DEMO_DATA.PRODUCT_REVIEWS_CN_SEARCH": [
-            "REVIEW_TEXT", "PRODUCT_NAME", "CATEGORY", "RATING", "PROVINCE"
-        ],
-        "SNOWFLAKE_PROD_USER1.CORTEX_SEARCH_RAG_DEMO.KNOWLEDGE_BASE_SEARCH": [
-            "CONTENT", "TITLE", "CATEGORY", "SOURCE"
-        ],
-    }
-    # Generic fallback: try common column names
-    return known_services.get(service_fqn, ["CONTENT", "TITLE", "SOURCE"])
+    try:
+        conn = _get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SHOW CORTEX SEARCH SERVICES IN ACCOUNT")
+            rows = cur.fetchall()
+            desc = [d[0].upper() for d in cur.description]
+            name_idx = desc.index("NAME") if "NAME" in desc else None
+            db_idx = desc.index("DATABASE_NAME") if "DATABASE_NAME" in desc else None
+            schema_idx = desc.index("SCHEMA_NAME") if "SCHEMA_NAME" in desc else None
+            cols_idx = desc.index("COLUMNS") if "COLUMNS" in desc else None
+            search_col_idx = desc.index("SEARCH_COLUMN") if "SEARCH_COLUMN" in desc else None
+            if name_idx is not None and cols_idx is not None:
+                for row in rows:
+                    fqn = f"{row[db_idx]}.{row[schema_idx]}.{row[name_idx]}" if db_idx is not None and schema_idx is not None else row[name_idx]
+                    if fqn == service_fqn or service_fqn.endswith(row[name_idx]):
+                        all_cols = [c.strip() for c in row[cols_idx].split(",") if c.strip()]
+                        search_col = row[search_col_idx] if search_col_idx is not None else None
+                        # Return all columns except the search column (it's included automatically)
+                        return [c for c in all_cols if c != search_col] or all_cols
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"Failed to auto-detect columns for {service_fqn}: {e}")
+    # Safe fallback — no SOURCE (not all services have it)
+    return ["CONTENT", "TITLE", "CATEGORY"]
+
+
+_CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "manufacturing": {
+        "keywords": ["产线", "产量", "良品", "良率", "工单", "质检", "缺陷", "质量", "生产", "班次",
+                      "OEE", "SPC", "组装", "焊接", "AOI", "8D", "不良", "返工", "过程能力",
+                      "控制图", "Cpk", "IQC", "IPQC", "FQC", "OQC", "FAI", "MES"],
+        "categories": ["质量体系", "质量标准", "SPC标准", "MES系统", "可靠性测试", "换型规范",
+                        "生产计划", "精益生产", "设备维护", "自动化规划", "工业物联网"],
+    },
+    "logistics": {
+        "keywords": ["物流", "运输", "仓库", "库存", "发货", "承运", "车辆", "运单", "配送", "冷链"],
+        "categories": ["仓储管理", "异常处理", "时效标准", "冷链规范", "考核标准", "智能仓储",
+                        "3PL选择", "跨境物流", "大促保障", "成本控制"],
+    },
+    "procurement": {
+        "keywords": ["采购", "供应商", "物料", "采购订单", "采购价", "供应链", "到货", "交期", "合同"],
+        "categories": ["准入标准", "审批流程", "验收标准", "合同管理", "供应商审计", "库存策略",
+                        "战略采购", "价格波动", "风险管理", "绿色供应链"],
+    },
+    "retail": {
+        "keywords": ["零售", "销售", "客户", "订单", "电商", "商品", "退货", "促销", "门店", "会员"],
+        "categories": ["退货政策", "会员规则", "促销规则", "服务规范", "运营指标", "数据安全",
+                        "全渠道策略", "客户画像", "数字化转型"],
+    },
+}
+
+
+def _detect_category_filter(query: str) -> dict | None:
+    """Detect domain from query keywords and return a Cortex Search filter for CATEGORY."""
+    q_lower = query.lower()
+    best_domain, best_score = None, 0
+    for domain, info in _CATEGORY_KEYWORDS.items():
+        score = sum(1 for kw in info["keywords"] if kw.lower() in q_lower)
+        if score > best_score:
+            best_score = score
+            best_domain = domain
+    if best_domain and best_score >= 1:
+        cats = _CATEGORY_KEYWORDS[best_domain]["categories"]
+        if len(cats) == 1:
+            return {"@eq": {"CATEGORY": cats[0]}}
+        return {"@or": [{"@eq": {"CATEGORY": c}} for c in cats]}
+    return None
 
 
 def _search_documents_sync(query: str, top_k: int = 5, service_name: str | None = None) -> dict:
     """Synchronous Cortex Search query. Runs in a thread to avoid blocking event loop."""
     if service_name:
-        # Use explicitly provided service name (from agent config)
         service_fqn = service_name
-        # Try to resolve to FQN if it's just a short name
         if "." not in service_fqn:
             from app.routers.sources import _active_sources
             for svc in _active_sources.get("search_services", []):
@@ -86,6 +141,11 @@ def _search_documents_sync(query: str, top_k: int = 5, service_name: str | None 
         "columns": columns,
         "limit": min(top_k, 20),
     }
+    # Auto-detect domain and add category filter
+    cat_filter = _detect_category_filter(query)
+    if cat_filter:
+        payload["filter"] = cat_filter
+        logger.info("Auto-filter cortex_search by domain: %s", cat_filter)
     payload_str = json.dumps(payload, ensure_ascii=False).replace("'", "''")
     sql = f"SELECT SNOWFLAKE.CORTEX.SEARCH_PREVIEW('{service_fqn}', '{payload_str}')"
 

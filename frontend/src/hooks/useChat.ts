@@ -14,7 +14,7 @@ export function useChat() {
   const abortRef = useRef<AbortController | null>(null);
 
   // Poll deep research task until completed or timeout
-  async function pollResearch(taskId: string, maxMs = 180000, onProgress?: (agents: SubAgent[]) => void): Promise<string | null> {
+  async function pollResearch(taskId: string, maxMs = 480000, onProgress?: (agents: SubAgent[]) => void): Promise<string | null> {
     const start = Date.now();
     while (Date.now() - start < maxMs) {
       await new Promise(r => setTimeout(r, 3000));
@@ -38,7 +38,7 @@ export function useChat() {
     return '深度研究超时';
   }
 
-  const sendMessage = useCallback(async (text: string, options?: { skillPrompt?: string; skillName?: string }) => {
+  const sendMessage = useCallback(async (text: string, options?: { skillPrompt?: string; skillName?: string; deepResearch?: boolean }) => {
     // If skill is active: content = full prompt (for AI), displayContent = user text (for UI)
     let apiContent = text;
     const userMsg: Message = { role: 'user', content: text };
@@ -82,6 +82,7 @@ export function useChat() {
 
     try {
       const body: Record<string, unknown> = { messages: apiMessages, agent_id: activeAgent };
+      if (options?.deepResearch) body.deep_research = true;
       const response = await fetch('/api/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,7 +178,7 @@ export function useChat() {
                 const startRes = await api.startResearch(resQuery, activeAgent);
                 const taskId = startRes.task_id;
                 if (taskId) {
-                  const pollResult = await pollResearch(taskId, 180000, (pollAgents: SubAgent[]) => {
+                  const pollResult = await pollResearch(taskId, 480000, (pollAgents: SubAgent[]) => {
                     // Update sub-agents in real-time from poll
                     subAgents.length = 0;
                     pollAgents.forEach(a => subAgents.push(a));

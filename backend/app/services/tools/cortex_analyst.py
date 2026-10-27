@@ -30,7 +30,7 @@ def _get_connection():
         conn.cursor().execute(f"USE WAREHOUSE {os.environ.get('SNOWFLAKE_WAREHOUSE', 'COWORK_WH')}")
         return conn
     # Local dev
-    return snowflake.connector.connect(connection_name='kr47337')
+    return snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
 
 def _get_semantic_model_content(explicit_model: str | None) -> str | None:

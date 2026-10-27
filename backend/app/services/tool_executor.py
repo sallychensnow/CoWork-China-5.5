@@ -107,11 +107,53 @@ TOOL_SCHEMAS = [
 ]
 
 
-def get_tool_schemas(enabled_tools: list[str] | None = None) -> list[dict]:
-    """Return tool schemas filtered by enabled tools list."""
-    if enabled_tools is None:
-        return TOOL_SCHEMAS
-    return [t for t in TOOL_SCHEMAS if t["function"]["name"] in enabled_tools]
+def get_tool_schemas(enabled_tools: list[str] | None = None, agent_config: dict | None = None) -> list[dict]:
+    """Return tool schemas filtered by enabled tools list.
+    
+    When agent_config has multiple semantic_models, injects the model list
+    into cortex_analyst's semantic_model description so the LLM can choose.
+    """
+    import copy
+    schemas = TOOL_SCHEMAS if enabled_tools is None else [t for t in TOOL_SCHEMAS if t["function"]["name"] in enabled_tools]
+    # Enrich cortex_analyst description with available models
+    if agent_config and agent_config.get("semantic_models") and len(agent_config["semantic_models"]) > 1:
+        model_names = [m.split("/")[-1] for m in agent_config["semantic_models"]]
+        model_hint = "Available models: " + ", ".join(model_names) + ". Pick the model that best matches the question domain."
+        schemas = copy.deepcopy(schemas)
+        for s in schemas:
+            if s["function"]["name"] == "cortex_analyst":
+                s["function"]["parameters"]["properties"]["semantic_model"]["description"] = (
+                    f"Semantic model to query. {model_hint}"
+                )
+    return schemas
+
+
+# Keyword-based model routing for multi-model agents
+_MODEL_KEYWORDS: dict[str, list[str]] = {
+    "manufacturing": ["产线", "产量", "良品", "良率", "工单", "质检", "缺陷", "质量", "生产", "班次", "OEE", "SPC", "组装", "焊接", "AOI"],
+    "logistics": ["物流", "运输", "仓库", "库存", "发货", "承运", "车辆", "运单", "配送", "物流商"],
+    "procurement": ["采购", "供应商", "物料", "采购订单", "采购价", "供应链", "到货", "交期"],
+    "retail": ["零售", "销售", "客户", "订单", "电商", "商品", "退货", "促销", "门店", "收入"],
+}
+
+
+def _pick_best_model(question: str, models: list[str]) -> str:
+    """Select the best semantic model for a question based on keyword matching."""
+    scores: dict[str, int] = {}
+    q_lower = question.lower()
+    for model_path in models:
+        model_file = model_path.split("/")[-1].replace(".yaml", "").replace("_model", "")
+        score = 0
+        for key, keywords in _MODEL_KEYWORDS.items():
+            if key in model_file:
+                for kw in keywords:
+                    if kw in q_lower:
+                        score += 1
+        scores[model_path] = score
+    best = max(scores, key=scores.get)  # type: ignore[arg-type]
+    if scores[best] > 0:
+        return best
+    return models[0]
 
 
 async def execute_tool(name: str, arguments: dict, agent_config: dict | None = None) -> dict:
@@ -146,7 +188,11 @@ async def _exec_cortex_analyst(args: dict, agent_config: dict | None = None) -> 
     # Determine semantic model from agent config or explicit argument
     semantic_model = args.get("semantic_model")
     if not semantic_model and agent_config and agent_config.get("semantic_models"):
-        semantic_model = agent_config["semantic_models"][0]  # use first configured model
+        models = agent_config["semantic_models"]
+        if len(models) == 1:
+            semantic_model = models[0]
+        else:
+            semantic_model = _pick_best_model(question, models)
     # SQL generation model: from agent config or default
     sql_model = (agent_config or {}).get("sql_model", "qwen-plus")
     try:
@@ -262,23 +308,38 @@ async def _exec_deep_research(args: dict, agent_config: dict | None = None, on_p
         use_arcticswarm = os.environ.get("USE_ARCTICSWARM", "true").lower() == "true"
 
         if use_arcticswarm:
-            print("[RESEARCH] Using ArcticSwarm engine", file=sys.stderr, flush=True)
-            from app.services.swarm_bridge import run_arcticswarm_research
-            enable_web = "web_search" in ((agent_config or {}).get("tools") or [])
-            result = await run_arcticswarm_research(
-                query=enriched_query,
-                max_teammates=3,
-                timeout_seconds=280,
-                on_progress=on_progress,
-                agent_config=agent_config,
-                enable_web_search=enable_web,
-            )
+            try:
+                print("[RESEARCH] Using ArcticSwarm engine", file=sys.stderr, flush=True)
+                from app.services.swarm_bridge import run_arcticswarm_research
+                enable_web = "web_search" in ((agent_config or {}).get("tools") or [])
+                result = await run_arcticswarm_research(
+                    query=enriched_query + "\n\n【输出语言要求】最终研究报告必须全部使用简体中文撰写（专业术语可保留英文缩写，如SPC、Cpk）。Final report MUST be written in Simplified Chinese.",
+                    max_teammates=2,
+                    timeout_seconds=240,
+                    on_progress=on_progress,
+                    agent_config=agent_config,
+                    enable_web_search=False,
+                )
+            except (ImportError, ModuleNotFoundError) as ie:
+                print(f"[RESEARCH] ArcticSwarm unavailable ({ie}), falling back to simple engine", file=sys.stderr, flush=True)
+                from app.services.deep_research import run_deep_research
+                result = await run_deep_research(enriched_query, on_progress=on_progress)
         else:
             print("[RESEARCH] Using simple deep_research engine (fallback)", file=sys.stderr, flush=True)
             from app.services.deep_research import run_deep_research
             result = await run_deep_research(enriched_query, on_progress=on_progress)
 
         print(f"[RESEARCH] Result status: {result.get('status')}", file=sys.stderr, flush=True)
+        # Guarantee a result: if swarm timed out / failed, synthesize directly from internal data
+        if result.get("status") != "completed" or not (result.get("report") or "").strip():
+            print("[RESEARCH] Falling back to direct synthesis from internal data", file=sys.stderr, flush=True)
+            if on_progress:
+                on_progress([{"id": "synthesizer", "role": "Synthesizer", "task": "基于内部数据综合报告", "status": "running"}])
+            report = await _synthesize_report(query, internal_context_parts)
+            if report:
+                result = {"status": "completed", "report": report}
+            if on_progress:
+                on_progress([{"id": "synthesizer", "role": "Synthesizer", "task": "基于内部数据综合报告", "status": "done"}])
         status = result.get("status")
         if status == "completed":
             return {
@@ -296,6 +357,32 @@ async def _exec_deep_research(args: dict, agent_config: dict | None = None, on_p
         import traceback
         print(f"[RESEARCH] Exception: {e}\n{traceback.format_exc()}", file=sys.stderr, flush=True)
         return {"success": False, "result": f"Deep Research error: {str(e)}", "display": None}
+
+
+async def _synthesize_report(query: str, context_parts: list[str]) -> str | None:
+    """Single LLM call that writes a research report from already-fetched internal data."""
+    import httpx
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    if not api_key:
+        return None
+    context = "\n\n".join(context_parts) if context_parts else "（未获取到内部数据）"
+    prompt = (
+        f"研究问题：{query}\n\n## 内部数据\n{context}\n\n"
+        "请基于以上内部数据撰写一份结构化的深度研究报告（Markdown），包括：核心发现、数据分析、"
+        "根因推断、改进建议。数据不足之处请明确说明，不要编造数字。"
+    )
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": "qwen-plus", "messages": [{"role": "user", "content": prompt}], "max_tokens": 4000},
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        print(f"[RESEARCH] Fallback synthesis failed: {e}", flush=True)
+        return None
 
 
 async def _exec_web_search(args: dict) -> dict:

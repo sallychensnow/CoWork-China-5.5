@@ -2,7 +2,7 @@
 
 ## 环境信息
 
-- **账号**: kr47337.cn-northwest-1 (SFCSUPPORTCHINA-SALLYTESTING)
+- **账号**: <your_account>
 - **访问URL**: SPCS Service endpoint（执行 `SHOW ENDPOINTS IN SERVICE COWORK.APP.COWORK_SERVICE` 获取）
 - **数据库**: COWORK (APP schema: agents/skills/stages, DATA schema: 业务数据)
 - **LLM**: 通义千问 qwen3-235b-a22b (DashScope API)

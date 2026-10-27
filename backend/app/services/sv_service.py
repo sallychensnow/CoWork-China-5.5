@@ -41,7 +41,7 @@ def _get_snowflake_conn():
             f"USE WAREHOUSE {os.environ.get('SNOWFLAKE_WAREHOUSE', 'COWORK_WH')}"
         )
         return conn
-    return snowflake.connector.connect(connection_name="kr47337")
+    return snowflake.connector.connect(connection_name=os.environ.get("SNOWFLAKE_CONNECTION_NAME", "default"))
 
 
 # --- Table Discovery ---

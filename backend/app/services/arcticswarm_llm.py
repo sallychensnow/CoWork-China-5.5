@@ -28,12 +28,15 @@ def build_china_config(max_teammates: int = 3):
         model=model,
         api_key=api_key,
         base_url=base_url,
-        # Swarm parameters
+        # Tell VLLMChatLLMClient to use DashScope model name, not Qwen/Qwen3.5-27B
+        agent_model_base_url=base_url,
+        vllm_served_model_id=model,
+        # Swarm parameters — internal data research (no web)
         swarm_enabled=True,
         max_teammates=max_teammates,
-        max_turns=30,
+        max_turns=20,
         max_tokens=8192,
-        # Web search disabled at config level (handled by custom ChinaWebSearchTool)
+        # No web search — internal Cortex tools only
         web_search_enabled=False,
         # Snowflake connection not needed (CoWork has its own)
         sf_connection_name="",

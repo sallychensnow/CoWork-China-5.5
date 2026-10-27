@@ -121,11 +121,17 @@ async def run_arcticswarm_research(
             "report": answer or "".join(report_parts) or "（无研究结果）",
         }
     except asyncio.TimeoutError:
-        logger.warning("ArcticSwarm research timed out after %ss", timeout_seconds)
-        return {
-            "status": "timeout",
-            "message": f"ArcticSwarm 深度研究超时（{int(timeout_seconds)}秒）。请简化问题后重试。",
-        }
+        logger.warning("ArcticSwarm research timed out after %ss, returning partial results", timeout_seconds)
+        partial = "".join(report_parts)
+        if partial.strip():
+            return {
+                "status": "completed",
+                "mode": "arcticswarm",
+                "agents_used": max_teammates,
+                "report": partial + "\n\n---\n*注：研究在时间限制内已尽力完成，以上为已收集到的分析结果。*",
+            }
+        # No partial results — fallback message
+        return {"status": "timeout", "mode": "arcticswarm", "message": "ArcticSwarm timed out without report"}
     except Exception as e:
         logger.exception("ArcticSwarm research failed")
         return {"status": "error", "message": f"ArcticSwarm error: {e}"}

@@ -1,0 +1,109 @@
+name: logistics_model
+description: "物流运输分析语义模型 - 覆盖运单、车辆和仓库数据"
+tables:
+  - name: LOGISTICS_SHIPMENTS
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: LOGISTICS_SHIPMENTS
+    description: "运单表，记录所有物流运输订单"
+    dimensions:
+      - name: SHIPMENT_ID
+        description: "运单编号"
+        expr: SHIPMENT_ID
+      - name: ORIGIN_CITY
+        description: "发货城市"
+        expr: ORIGIN_CITY
+      - name: DEST_CITY
+        description: "收货城市"
+        expr: DEST_CITY
+      - name: CARRIER
+        description: "承运商：顺丰速运、京东物流、中通快递"
+        expr: CARRIER
+      - name: STATUS
+        description: "运单状态：已签收、配送中、异常"
+        expr: STATUS
+    time_dimensions:
+      - name: SHIP_DATE
+        description: "发货日期"
+        expr: SHIP_DATE
+        data_type: DATE
+    measures:
+      - name: SHIPMENT_COUNT
+        description: "运单数量"
+        expr: COUNT(SHIPMENT_ID)
+      - name: TOTAL_SHIPPING_FEE
+        description: "总运费（元）"
+        expr: SUM(SHIPPING_FEE)
+      - name: TOTAL_WEIGHT
+        description: "总重量（kg）"
+        expr: SUM(WEIGHT_KG)
+      - name: AVG_ACTUAL_DAYS
+        description: "平均实际配送天数"
+        expr: AVG(ACTUAL_DAYS)
+      - name: OVERDUE_RATE
+        description: "超时率（实际天数>承诺天数的比例）"
+        expr: COUNT(CASE WHEN ACTUAL_DAYS > PROMISED_DAYS THEN 1 END)*100.0/COUNT(*)
+
+  - name: LOGISTICS_VEHICLES
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: LOGISTICS_VEHICLES
+    description: "车辆表，记录运输车辆信息"
+    dimensions:
+      - name: VEHICLE_ID
+        description: "车辆编号"
+        expr: VEHICLE_ID
+      - name: PLATE_NUMBER
+        description: "车牌号"
+        expr: PLATE_NUMBER
+      - name: VEHICLE_TYPE
+        description: "车辆类型：重型卡车、中型货车、轻型货车"
+        expr: VEHICLE_TYPE
+      - name: STATUS
+        description: "车辆状态：运行中、待命、维修中"
+        expr: STATUS
+    measures:
+      - name: VEHICLE_COUNT
+        description: "车辆数量"
+        expr: COUNT(VEHICLE_ID)
+      - name: TOTAL_CAPACITY
+        description: "总载重能力（kg）"
+        expr: SUM(MAX_LOAD_KG)
+
+  - name: LOGISTICS_WAREHOUSES
+    base_table:
+      database: COWORK
+      schema: DATA
+      table: LOGISTICS_WAREHOUSES
+    description: "仓库表，记录仓储设施信息"
+    dimensions:
+      - name: WAREHOUSE_NAME
+        description: "仓库名称"
+        expr: WAREHOUSE_NAME
+      - name: CITY
+        description: "所在城市"
+        expr: CITY
+      - name: REGION
+        description: "所在区域"
+        expr: REGION
+    measures:
+      - name: AVG_UTILIZATION
+        description: "平均利用率"
+        expr: AVG(UTILIZATION_RATE)
+      - name: TOTAL_DAILY_CAPACITY
+        description: "总日处理能力"
+        expr: SUM(DAILY_CAPACITY)
+
+verified_queries:
+  - question: "各承运商的平均配送时效和超时率"
+    sql: "SELECT CARRIER, ROUND(AVG(ACTUAL_DAYS),1) AS AVG_DAYS, ROUND(COUNT(CASE WHEN ACTUAL_DAYS > PROMISED_DAYS THEN 1 END)*100.0/COUNT(*),1) AS OVERDUE_PCT FROM COWORK.DATA.LOGISTICS_SHIPMENTS GROUP BY CARRIER ORDER BY OVERDUE_PCT DESC"
+  - question: "各仓库的利用率排名"
+    sql: "SELECT WAREHOUSE_NAME, CITY, ROUND(UTILIZATION_RATE*100,1) AS UTIL_PCT FROM COWORK.DATA.LOGISTICS_WAREHOUSES ORDER BY UTILIZATION_RATE DESC"
+  - question: "每月发货量趋势"
+    sql: "SELECT DATE_TRUNC('MONTH', SHIP_DATE) AS MONTH, COUNT(*) AS SHIPMENTS FROM COWORK.DATA.LOGISTICS_SHIPMENTS GROUP BY MONTH ORDER BY MONTH"
+  - question: "异常运单数量和占比"
+    sql: "SELECT STATUS, COUNT(*) AS CNT, ROUND(COUNT(*)*100.0/(SELECT COUNT(*) FROM COWORK.DATA.LOGISTICS_SHIPMENTS),1) AS PCT FROM COWORK.DATA.LOGISTICS_SHIPMENTS GROUP BY STATUS ORDER BY CNT DESC"
+  - question: "哪条线路运费最高"
+    sql: "SELECT ORIGIN_CITY, DEST_CITY, COUNT(*) AS SHIPMENTS, ROUND(SUM(SHIPPING_FEE),2) AS TOTAL_FEE FROM COWORK.DATA.LOGISTICS_SHIPMENTS GROUP BY ORIGIN_CITY, DEST_CITY ORDER BY TOTAL_FEE DESC LIMIT 10"
